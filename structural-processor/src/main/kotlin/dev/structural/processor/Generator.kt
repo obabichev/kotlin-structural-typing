@@ -13,28 +13,51 @@ import com.squareup.kotlinpoet.FileSpec
 import com.squareup.kotlinpoet.FunSpec
 import com.squareup.kotlinpoet.INT
 import com.squareup.kotlinpoet.KModifier
+import com.squareup.kotlinpoet.MemberName
+import com.squareup.kotlinpoet.ParameterSpec
 import com.squareup.kotlinpoet.PropertySpec
 import com.squareup.kotlinpoet.STRING
+import com.squareup.kotlinpoet.TypeName
 import com.squareup.kotlinpoet.TypeSpec
 import com.squareup.kotlinpoet.joinToCode
 import com.squareup.kotlinpoet.ksp.toClassName
 import com.squareup.kotlinpoet.ksp.toTypeName
 import com.squareup.kotlinpoet.ksp.writeTo
 
-/** Collects generated overloads and proxies into files, then writes them all at once. */
+/** Collects generated adapters, overloads and proxies into files, then writes them all at once. */
 class Generator(private val codeGenerator: CodeGenerator, private val dependencies: Dependencies) {
     private val files = linkedMapOf<Pair<String, String>, FileSpec.Builder>()
     private val proxies = mutableMapOf<Pair<String, String>, ClassName>()
     private val proxyNames = mutableSetOf<ClassName>()
 
-    fun overload(function: StructuralFunction, candidate: KSClassDeclaration, nominal: Boolean) {
+    /** `fun I.asI(): I = this`, so any value already implementing the interface can be converted uniformly. */
+    fun identityAdapter(iface: StructuralInterface) {
+        val internal = iface.declaration.effectiveVisibility() == Visibility.INTERNAL
+        adapterFile(iface).addFunction(
+            adapterBuilder(iface, iface.declaration.toClassName(), internal).addStatement("return this").build(),
+        )
+    }
+
+    /** `fun C.asI(): I`, returning `this` when [candidate] implements the interface nominally, otherwise a proxy. */
+    fun adapter(iface: StructuralInterface, candidate: KSClassDeclaration, nominal: Boolean) {
+        val internal = iface.declaration.effectiveVisibility() == Visibility.INTERNAL ||
+            candidate.effectiveVisibility() == Visibility.INTERNAL
+        val builder = adapterBuilder(iface, candidate.toClassName(), internal)
+        if (nominal) builder.addStatement("return this") else builder.addStatement("return %T(this)", proxyFor(candidate, iface))
+        adapterFile(iface).addFunction(builder.build())
+    }
+
+    fun overload(function: StructuralFunction, candidate: KSClassDeclaration) {
         val declaration = function.declaration
         val owner = function.owner
         val name = declaration.simpleName.asString()
-        val parameterNames = declaration.parameters.map { it.name!!.asString() }
-        val structuralName = parameterNames[function.slot]
-        val argumentName = uniqueName("structuralArgument", parameterNames)
-        val receiver = owner?.toClassName() ?: declaration.extensionReceiver?.toTypeName()
+        val adapter = adapterName(function.iface)
+        val onReceiver = function.slot == StructuralFunction.RECEIVER
+        val receiver = when {
+            onReceiver -> candidate.toClassName()
+            owner != null -> owner.toClassName()
+            else -> declaration.extensionReceiver?.toTypeName()
+        }
         val internal = declaration.effectiveVisibility() == Visibility.INTERNAL ||
             candidate.effectiveVisibility() == Visibility.INTERNAL
 
@@ -45,25 +68,51 @@ class Generator(private val codeGenerator: CodeGenerator, private val dependenci
         receiver?.let { builder.receiver(it) }
         declaration.parameters.forEachIndexed { index, parameter ->
             val type = if (index == function.slot) candidate.toClassName() else parameter.type.toTypeName()
-            builder.addParameter(parameterNames[index], type)
+            val spec = ParameterSpec.builder(parameter.name!!.asString(), type)
+            if (parameter.isVararg) spec.addModifiers(KModifier.VARARG)
+            builder.addParameter(spec.build())
         }
 
-        val ifaceType = function.iface.declaration.toClassName()
-        if (nominal) {
-            builder.addStatement("val %N: %T = %N", argumentName, ifaceType, structuralName)
-        } else {
-            builder.addStatement("val %N: %T = %T(%N)", argumentName, ifaceType, proxyFor(candidate, function.iface), structuralName)
+        // Converting with the adapter gives the interface type, so the call can't resolve to this overload again.
+        val arguments = declaration.parameters.mapIndexed { index, parameter ->
+            val parameterName = parameter.name!!.asString()
+            // Named vararg arguments take an array directly; a spread there is a "redundant spread" warning.
+            val value = when {
+                index != function.slot -> CodeBlock.of("%N", parameterName)
+                parameter.isVararg -> CodeBlock.of("%N.map { it.%M() }.toTypedArray()", parameterName, adapter)
+                else -> CodeBlock.of("%N.%M()", parameterName, adapter)
+            }
+            CodeBlock.of("%N = %L", parameterName, value)
+        }.joinToCode()
+        val call = when {
+            onReceiver -> CodeBlock.of("this.%M().%N(%L)", adapter, name, arguments)
+            receiver != null -> CodeBlock.of("this.%N(%L)", name, arguments)
+            else -> CodeBlock.of("%N(%L)", name, arguments)
         }
-        val arguments = parameterNames
-            .map { CodeBlock.of("%N = %N", it, if (it == structuralName) argumentName else it) }
-            .joinToCode()
-        builder.addStatement(if (receiver != null) "return this.%N(%L)" else "return %N(%L)", name, arguments)
+        builder.addStatement("return %L", call)
 
         val packageName = (owner ?: declaration).packageName.asString()
         val fileName = owner?.toClassName()?.simpleNames?.joinToString("_")
             ?: declaration.containingFile!!.fileName.removeSuffix(".kt")
         file(packageName, "${fileName}_Structural").addFunction(builder.build())
     }
+
+    private fun adapterName(iface: StructuralInterface): MemberName = MemberName(
+        iface.declaration.packageName.asString(),
+        "as" + iface.declaration.simpleName.asString(),
+        isExtension = true,
+    )
+
+    private fun adapterBuilder(iface: StructuralInterface, receiver: TypeName, internal: Boolean): FunSpec.Builder =
+        FunSpec.builder(adapterName(iface).simpleName)
+            .addModifiers(if (internal) KModifier.INTERNAL else KModifier.PUBLIC)
+            .receiver(receiver)
+            .returns(iface.declaration.toClassName())
+
+    private fun adapterFile(iface: StructuralInterface): FileSpec.Builder = file(
+        iface.declaration.packageName.asString(),
+        iface.declaration.toClassName().simpleNames.joinToString("_") + "_Adapters",
+    )
 
     fun write() {
         files.values.forEach { it.build().writeTo(codeGenerator, dependencies) }

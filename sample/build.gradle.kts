@@ -13,10 +13,6 @@ dependencies {
     testImplementation(kotlin("test"))
 }
 
-ksp {
-    arg("structural.packages", "com.example.model")
-}
-
 tasks.test {
     useJUnitPlatform()
 }

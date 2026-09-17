@@ -19,11 +19,14 @@ sealed interface Decision {
     val candidate: String
 }
 
-data class GenerateOverload(override val candidate: String, val iface: String, val nominal: Boolean) : Decision
+data class Generate(override val candidate: String, val iface: String, val nominal: Boolean) : Decision
 
-data class AmbiguousCandidate(override val candidate: String, val ifaces: Set<String>) : Decision
+data class Ambiguous(override val candidate: String, val ifaces: Set<String>) : Decision
 
-/** Decides which overloads to generate for one function group (see "Overload resolution safety" in the proposal). */
+/**
+ * Decides which overloads (for a function group) or adapters (for an interface) to generate, so that the generated
+ * declarations never make a call ambiguous. See "Overload resolution safety" in the proposal.
+ */
 object OverloadPlanner {
     fun plan(input: PlanInput): List<Decision> {
         fun supertypesOf(name: String) = input.supertypes[name].orEmpty()
@@ -46,10 +49,10 @@ object OverloadPlanner {
                 0 -> Unit
                 1 -> {
                     val iface = interfaces.single()
-                    decisions += GenerateOverload(candidate.name, iface, nominal = iface in supertypes)
+                    decisions += Generate(candidate.name, iface, nominal = iface in supertypes)
                     planned += candidate.name
                 }
-                else -> decisions += AmbiguousCandidate(candidate.name, interfaces)
+                else -> decisions += Ambiguous(candidate.name, interfaces)
             }
         }
         return decisions

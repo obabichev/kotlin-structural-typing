@@ -2,6 +2,7 @@ package dev.structural.processor
 
 import com.google.devtools.ksp.getAllSuperTypes
 import com.google.devtools.ksp.getVisibility
+import com.google.devtools.ksp.symbol.KSAnnotated
 import com.google.devtools.ksp.symbol.KSClassDeclaration
 import com.google.devtools.ksp.symbol.KSDeclaration
 import com.google.devtools.ksp.symbol.KSType
@@ -12,11 +13,19 @@ internal const val STRUCTURAL_ANNOTATION = "dev.structural.Structural"
 internal val KSDeclaration.fqName: String
     get() = qualifiedName?.asString() ?: simpleName.asString()
 
-internal fun KSType.isStructural(): Boolean {
-    val declaration = declaration as? KSClassDeclaration ?: return false
-    return declaration.annotations.any {
-        it.shortName.asString() == "Structural" &&
-            it.annotationType.resolve().declaration.qualifiedName?.asString() == STRUCTURAL_ANNOTATION
+internal fun KSAnnotated.hasAnnotation(qualifiedName: String): Boolean = annotations.any {
+    it.shortName.asString() == qualifiedName.substringAfterLast('.') &&
+        it.annotationType.resolve().declaration.qualifiedName?.asString() == qualifiedName
+}
+
+internal fun KSType.isStructural(): Boolean =
+    (declaration as? KSClassDeclaration)?.hasAnnotation(STRUCTURAL_ANNOTATION) == true
+
+/** @Structural interfaces used in this type: the type itself and its type arguments, recursively. */
+internal fun KSType.structuralDeclarations(): Sequence<KSClassDeclaration> = sequence {
+    if (isStructural()) yield(declaration as KSClassDeclaration)
+    for (argument in arguments) {
+        argument.type?.resolve()?.let { yieldAll(it.structuralDeclarations()) }
     }
 }
 

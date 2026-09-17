@@ -25,7 +25,7 @@ class OverloadPlannerTest {
     @Test
     fun `structural match gets a proxy overload`() {
         val decisions = plan(listOf(PlanCandidate("Rect", setOf("Sized"))), mapOf("Rect" to setOf(any)))
-        assertEquals(listOf(GenerateOverload("Rect", "Sized", nominal = false)), decisions)
+        assertEquals(listOf(Generate("Rect", "Sized", nominal = false)), decisions)
     }
 
     @Test
@@ -44,7 +44,7 @@ class OverloadPlannerTest {
             candidates = listOf(PlanCandidate("Mid", setOf("Sized")), PlanCandidate("Base", setOf("Sized"))),
             supertypes = mapOf("Mid" to setOf("Base", any), "Base" to setOf(any)),
         )
-        assertEquals(listOf(GenerateOverload("Base", "Sized", nominal = false)), decisions)
+        assertEquals(listOf(Generate("Base", "Sized", nominal = false)), decisions)
     }
 
     @Test
@@ -54,7 +54,7 @@ class OverloadPlannerTest {
             supertypes = mapOf("Base" to setOf(any), "Child" to setOf("Base", "Sized", any)),
         )
         assertEquals(
-            listOf(GenerateOverload("Base", "Sized", nominal = false), GenerateOverload("Child", "Sized", nominal = true)),
+            listOf(Generate("Base", "Sized", nominal = false), Generate("Child", "Sized", nominal = true)),
             decisions,
         )
     }
@@ -67,7 +67,7 @@ class OverloadPlannerTest {
             declared = listOf("Sized", "Named"),
             structural = setOf("Sized", "Named"),
         )
-        assertEquals(listOf(AmbiguousCandidate("Both", setOf("Named", "Sized"))), decisions)
+        assertEquals(listOf(Ambiguous("Both", setOf("Named", "Sized"))), decisions)
     }
 
     @Test
@@ -88,6 +88,6 @@ class OverloadPlannerTest {
             declared = listOf("Sized", "Base"),
             membersFirst = true,
         )
-        assertEquals(listOf(GenerateOverload("Rect", "Sized", nominal = false)), decisions)
+        assertEquals(listOf(Generate("Rect", "Sized", nominal = false)), decisions)
     }
 }

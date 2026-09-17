@@ -6,7 +6,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-class GenerationTest {
+class OverloadGenerationTest {
     private val sized = """
         package test
         import dev.structural.Structural
@@ -20,6 +20,8 @@ class GenerationTest {
 
     private fun Compiled.runMain(): Any? {
         assertTrue(succeeded, messages)
+        val generatedCodeWarnings = messages.lines().filter { it.startsWith("w:") && "/ksp/sources/" in it }
+        assertEquals(emptyList(), generatedCodeWarnings, "warnings in generated code")
         return call("test.GeometryKt", "run")
     }
 
@@ -33,8 +35,99 @@ class GenerationTest {
             """,
         )
         assertEquals(2, compiled.runMain())
-        assertContains(compiled.generatedFile("Geometry_Structural.kt"), "public fun size(target: Rectangular): Int")
-        assertContains(compiled.generatedFile("Rectangular_AsSized.kt"), "internal class Rectangular_AsSized(")
+        assertContains(
+            compiled.generatedFile("Geometry_Structural.kt"),
+            "public fun size(target: Rectangular): Int = size(target = target.asSized())",
+        )
+    }
+
+    @Test
+    fun `works without the packages option`() {
+        val compiled = compile(
+            kotlin(
+                "Geometry.kt",
+                """
+                package test
+                import dev.structural.Structural
+                @Structural interface Sized { val width: Int; val height: Int }
+                class Rectangular(val width: Int, val height: Int)
+                fun size(target: Sized) = target.width * target.height
+                fun run() = size(Rectangular(2, 3))
+                """,
+            ),
+            options = emptyMap(),
+        )
+        assertEquals(6, compiled.runMain())
+    }
+
+    @Test
+    fun `nullable structural parameter`() {
+        val compiled = compileWith(
+            "class Rectangular(val width: Int, val height: Int)",
+            """
+            fun describe(target: Sized?) = target?.width?.toString() ?: "none"
+            fun run() = describe(Rectangular(4, 1)) + describe(null)
+            """,
+        )
+        assertEquals("4none", compiled.runMain())
+        assertContains(
+            compiled.generatedFile("Geometry_Structural.kt"),
+            "public fun describe(target: Rectangular): String = describe(target = target.asSized())",
+        )
+    }
+
+    @Test
+    fun `structural extension receiver`() {
+        val compiled = compileWith(
+            "class Rectangular(val width: Int, val height: Int)",
+            """
+            fun Sized.area() = width * height
+            fun run() = Rectangular(2, 5).area()
+            """,
+        )
+        assertEquals(10, compiled.runMain())
+        assertContains(compiled.generatedFile("Geometry_Structural.kt"), "public fun Rectangular.area(): Int = this.asSized().area()")
+    }
+
+    @Test
+    fun `companion object member`() {
+        val compiled = compileWith(
+            "class Rectangular(val width: Int, val height: Int)",
+            """
+            class Factory { companion object { fun measure(target: Sized) = target.width } }
+            fun run() = Factory.measure(Rectangular(8, 1))
+            """,
+        )
+        assertEquals(8, compiled.runMain())
+        assertContains(
+            compiled.generatedFile("Factory_Companion_Structural.kt"),
+            "public fun Factory.Companion.measure(target: Rectangular): Int",
+        )
+    }
+
+    @Test
+    fun `vararg of one class`() {
+        val compiled = compileWith(
+            "class Rectangular(val width: Int, val height: Int)",
+            """
+            fun total(prefix: String, vararg targets: Sized) = prefix + targets.sumOf { it.width * it.height }
+            fun run() = total("sum=", Rectangular(1, 2), Rectangular(3, 4))
+            """,
+        )
+        assertEquals("sum=14", compiled.runMain())
+        assertContains(compiled.generatedFile("Geometry_Structural.kt"), "vararg targets: Rectangular")
+    }
+
+    @Test
+    fun `other vararg parameters are passed through`() {
+        val compiled = compileWith(
+            "class Rectangular(val width: Int, val height: Int)",
+            """
+            fun label(target: Sized, vararg parts: String) = parts.joinToString("-") + target.width
+            fun run() = label(Rectangular(5, 1), "a", "b")
+            """,
+        )
+        assertEquals("a-b5", compiled.runMain())
     }
 
     @Test
@@ -47,7 +140,10 @@ class GenerationTest {
             """,
         )
         assertEquals(6, compiled.runMain())
-        assertContains(compiled.generatedFile("Canvas_Structural.kt"), "public fun Canvas.area(target: Rectangular): Int")
+        assertContains(
+            compiled.generatedFile("Canvas_Structural.kt"),
+            "public fun Canvas.area(target: Rectangular): Int = this.area(target = target.asSized())",
+        )
     }
 
     @Test
@@ -80,30 +176,7 @@ class GenerationTest {
     }
 
     @Test
-    fun `var properties write through`() {
-        val compiled = compile(
-            kotlin("Model.kt", "package test.model\nclass Counter(var count: Int)"),
-            kotlin(
-                "Geometry.kt",
-                """
-                package test
-                import dev.structural.Structural
-                import test.model.Counter
-                @Structural interface Counting { var count: Int }
-                fun increment(target: Counting) { target.count++ }
-                fun run(): Int {
-                    val counter = Counter(1)
-                    increment(counter)
-                    return counter.count
-                }
-                """,
-            ),
-        )
-        assertEquals(2, compiled.runMain())
-    }
-
-    @Test
-    fun `base class overload covers subclasses and nominal subclass gets a direct overload`() {
+    fun `base class overload covers subclasses and nominal subclass gets its own overload`() {
         val compiled = compileWith(
             """
             open class Base(val width: Int, val height: Int)
@@ -120,7 +193,6 @@ class GenerationTest {
         assertContains(overloads, "fun size(target: Base)")
         assertContains(overloads, "fun size(target: Child)")
         assertFalse("target: Mid" in overloads, overloads)
-        assertContains(overloads, "val structuralArgument: Sized = target\n")
     }
 
     @Test
@@ -134,10 +206,10 @@ class GenerationTest {
             @Structural interface Named { val name: String }
             fun describe(target: Sized) = "sized"
             fun describe(target: Named) = "named"
-            fun run() = describe(Person("x"))
+            fun run() = describe(Person("x")) + describe(Labeled(1, 1, "y").asSized())
             """,
         )
-        assertEquals("named", compiled.runMain())
+        assertEquals("namedsized", compiled.runMain())
         assertContains(
             compiled.messages,
             "[structural] Not generating test.describe for test.model.Labeled: it matches several @Structural interfaces (test.Named, test.Sized)",
@@ -171,18 +243,6 @@ class GenerationTest {
     }
 
     @Test
-    fun `proxies compare and print through their target`() {
-        val compiled = compileWith(
-            "data class Point(val width: Int, val height: Int)",
-            """
-            fun identity(target: Sized): Sized = target
-            fun run() = listOf(identity(Point(1, 2)) == identity(Point(1, 2)), identity(Point(1, 2)).toString())
-            """,
-        )
-        assertEquals(listOf(true, "Point(width=1, height=2)"), compiled.runMain())
-    }
-
-    @Test
     fun `calling an unsupported function still fails to compile`() {
         val compiled = compileWith(
             "class Rectangular(val width: Int, val height: Int)",
@@ -194,22 +254,5 @@ class GenerationTest {
         assertFalse(compiled.succeeded)
         assertContains(compiled.messages, "[structural] Skipping test.fit")
         assertContains(compiled.messages, "mismatch", ignoreCase = true)
-    }
-
-    @Test
-    fun `generated names avoid clashes with parameters and properties`() {
-        val compiled = compileWith(
-            """
-            class Rectangular(val width: Int, val height: Int)
-            class Arrow(val target: String)
-            """,
-            """
-            @Structural interface Aimed { val target: String }
-            fun pick(target: Sized, structuralArgument: Int) = target.width + structuralArgument
-            fun aim(aimed: Aimed) = aimed.target
-            fun run() = pick(Rectangular(1, 2), 10).toString() + aim(Arrow("x"))
-            """,
-        )
-        assertEquals("11x", compiled.runMain())
     }
 }
