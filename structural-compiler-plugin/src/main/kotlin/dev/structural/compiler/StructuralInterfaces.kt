@@ -23,7 +23,7 @@ import org.jetbrains.kotlin.fir.symbols.SymbolInternals
 import org.jetbrains.kotlin.fir.symbols.impl.FirPropertySymbol
 import org.jetbrains.kotlin.fir.symbols.impl.FirRegularClassSymbol
 import org.jetbrains.kotlin.fir.types.ConeTypeParameterType
-import org.jetbrains.kotlin.fir.types.FirTypeRef
+import org.jetbrains.kotlin.fir.types.ConeKotlinType
 import org.jetbrains.kotlin.fir.types.classId
 import org.jetbrains.kotlin.fir.types.contains
 import org.jetbrains.kotlin.name.ClassId
@@ -83,8 +83,8 @@ private fun FirSession.structuralInterface(iface: FirRegularClassSymbol, types: 
             if (declaration.typeParameters.isNotEmpty() || declaration.receiverParameter != null) return false
             requirements += member
         }
-        for (superTypeRef in symbol.fir.superTypeRefs) {
-            val classId = types.resolve(superTypeRef, symbol)?.classId ?: return false
+        for (superType in types.superTypes(symbol)) {
+            val classId = superType.classId ?: return false
             if (classId == StandardClassIds.Any) continue
             val superSymbol = symbolProvider.getClassLikeSymbolByClassId(classId) as? FirRegularClassSymbol ?: return false
             if (superSymbol.classKind != ClassKind.INTERFACE || !collect(superSymbol)) return false
@@ -127,21 +127,21 @@ private fun FirSession.declaredMembers(symbol: FirRegularClassSymbol): List<FirC
 }
 
 /** Properties and functions of [klass] and its superclass chain, nearest first. */
-internal fun FirSession.classMembers(klass: FirRegularClassSymbol, supertypeRefs: List<FirTypeRef>, types: TypeLookup): List<Member> {
+internal fun FirSession.classMembers(klass: FirRegularClassSymbol, supertypes: List<ConeKotlinType>, types: TypeLookup): List<Member> {
     val members = mutableListOf<Member>()
     var current: FirRegularClassSymbol? = klass
-    var currentSupertypes = supertypeRefs
+    var currentSupertypes = supertypes
     val visited = mutableSetOf<ClassId>()
     while (current != null && visited.add(current.classId)) {
         val owner = current
         declaredMembers(current).mapTo(members) { Member(it, owner) }
         // Members of generic superclasses are collected too; those whose types use type parameters never match.
         val superclass = currentSupertypes
-            .mapNotNull { types.resolve(it, owner)?.classId }
+            .mapNotNull { it.classId }
             .mapNotNull { symbolProvider.getClassLikeSymbolByClassId(it) as? FirRegularClassSymbol }
             .firstOrNull { it.classKind == ClassKind.CLASS }
         current = superclass
-        currentSupertypes = superclass?.fir?.superTypeRefs.orEmpty()
+        currentSupertypes = superclass?.let { types.superTypes(it) }.orEmpty()
     }
     return members
 }
@@ -165,10 +165,9 @@ internal fun FirSession.satisfies(member: Member, requirement: Member, types: Ty
     if (!candidate.status.visibility.isPublicOrDefault()) return false
 
     // Types involving type parameters (of a generic superclass) would need substitution: treat them as unknown.
-    fun type(typeRef: FirTypeRef, owner: FirRegularClassSymbol) =
-        types.resolve(typeRef, owner)?.takeUnless { type -> type.contains { it is ConeTypeParameterType } }
-    val expectedReturn = type(required.returnTypeRef, requirement.owner) ?: return false
-    val actualReturn = type(candidate.returnTypeRef, member.owner) ?: return false
+    fun concrete(type: ConeKotlinType?) = type?.takeUnless { it.contains { part -> part is ConeTypeParameterType } }
+    val expectedReturn = concrete(types.returnType(required, requirement.owner)) ?: return false
+    val actualReturn = concrete(types.returnType(candidate, member.owner)) ?: return false
 
     return when {
         required is FirProperty && candidate is FirProperty -> {
@@ -182,8 +181,8 @@ internal fun FirSession.satisfies(member: Member, requirement: Member, types: Ty
             if (candidate.status.isSuspend != required.status.isSuspend || candidate.status.isInline) return false
             if (candidate.valueParameters.size != required.valueParameters.size) return false
             val parametersMatch = candidate.valueParameters.zip(required.valueParameters).all { (actual, expected) ->
-                val actualType = type(actual.returnTypeRef, member.owner)
-                val expectedType = type(expected.returnTypeRef, requirement.owner)
+                val actualType = concrete(types.parameterType(actual, member.owner))
+                val expectedType = concrete(types.parameterType(expected, requirement.owner))
                 actual.name == expected.name &&
                     actual.isVararg == expected.isVararg &&
                     actual.defaultValue == null &&

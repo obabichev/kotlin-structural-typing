@@ -35,7 +35,7 @@ class StructuralSupertypeGenerator(session: FirSession) : FirSupertypeGeneration
         val klass = classLikeDeclaration as? FirRegularClass ?: return emptyList()
         val types = SupertypePhaseTypes(session, fileScopes, klass.symbol, typeResolver)
         val existing = resolvedSupertypes.mapNotNull { it.coneType.classId }.toSet()
-        val members = session.classMembers(klass.symbol, resolvedSupertypes, types)
+        val members = session.classMembers(klass.symbol, resolvedSupertypes.map { it.coneType }, types)
         val added = structuralInterfaces
             .filter { it.classId !in existing && session.implementsByShape(members, it, types) }
             .map { it.classId.constructClassLikeType(emptyArray(), isMarkedNullable = false) }

@@ -104,15 +104,21 @@ While deciding supertypes the plugin can't use the compiler's type checker (doin
 - compares Java platform types by their non-null form
 - never matches members of generic superclasses whose types use type parameters
 
-### 12. Enum classes depend on how each compiler applies supertypes
+### 12. The IDE compiles the same code differently from Gradle
 
-The command-line compiler (Gradle) doesn't write computed supertypes back to enum classes, so the plugin adds the
-interface to the enum class directly. IntelliJ's compiler (`LLFirSuperTypeTargetResolver`) always replaces the supertypes
-with the computed ones and would drop the directly added interface, so the plugin also returns it.
+IntelliJ analyzes code with its own implementation of the compiler frontend: it resolves each declaration on demand
+rather than phase by phase, and applies supertypes differently. Two bugs appeared only in the IDE:
 
-The first version only added it directly: the build worked, but in IntelliJ enum classes didn't implement the interface
-(`listOf(Product(…), Priority.HIGH)` showed `List<Any>` instead of `List<Labeled>`). The fix follows the IDE code but
-isn't confirmed in IntelliJ yet, and no automated test runs IntelliJ's compiler (see the roadmap).
+- **Enum classes:** the command-line compiler doesn't write computed supertypes back to enum classes, so the plugin adds
+  the interface to the enum class directly; IntelliJ replaces the supertypes with the computed ones and dropped it.
+  The plugin now does both.
+- **`override` marking:** the plugin read the interface's member types straight from its declarations. In IntelliJ those
+  may not be resolved yet when a class is checked, so nothing matched and the class reported
+  `'name' hides member of supertype 'Named' and needs an 'override' modifier`. Types are now read through symbols,
+  which makes IntelliJ resolve them on demand.
+
+Both fixes follow the IDE's own code but are only confirmed by hand in IntelliJ; no automated test runs its compiler
+(see the roadmap). Expect further differences of this kind.
 
 ## Development notes
 

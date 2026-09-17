@@ -37,7 +37,7 @@ object InferredMemberTypesChecker : FirDeclarationChecker<FirRegularClass>(MppCh
         val supertypes = lookupSuperTypes(declaration.symbol, lookupInterfaces = true, deep = true, useSiteSession = session)
             .mapNotNull { it.classId }
             .toSet()
-        val members = session.classMembers(declaration.symbol, declaration.superTypeRefs, types)
+        val members = session.classMembers(declaration.symbol, types.superTypes(declaration.symbol), types)
 
         for (iface in session.structuralInterfaces(types)) {
             if (iface.classId in supertypes || !session.implementsByShape(members, iface, types)) continue

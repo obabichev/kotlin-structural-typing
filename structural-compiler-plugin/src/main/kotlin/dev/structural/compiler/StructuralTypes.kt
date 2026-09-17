@@ -3,8 +3,10 @@
 package dev.structural.compiler
 
 import org.jetbrains.kotlin.fir.FirSession
+import org.jetbrains.kotlin.fir.declarations.FirCallableDeclaration
 import org.jetbrains.kotlin.fir.declarations.FirClass
 import org.jetbrains.kotlin.fir.declarations.FirTypeAlias
+import org.jetbrains.kotlin.fir.declarations.FirValueParameter
 import org.jetbrains.kotlin.fir.extensions.FirSupertypeGenerationExtension
 import org.jetbrains.kotlin.fir.resolve.ScopeSession
 import org.jetbrains.kotlin.fir.resolve.SupertypeSupplier
@@ -32,20 +34,38 @@ import org.jetbrains.kotlin.name.ClassId
 import org.jetbrains.kotlin.name.StandardClassIds
 import org.jetbrains.kotlin.types.AbstractTypeChecker
 
-/** How types of declarations are found and compared, which depends on the compiler phase. */
+/**
+ * How types of declarations are found and compared, which depends on the compiler phase. Each type belongs to the class
+ * that declares it, whose file decides how it resolves. Null means the type isn't known (yet) or doesn't resolve.
+ */
 internal interface TypeLookup {
-    /** The type of [typeRef] written inside [owner]; null when it isn't known (yet) or doesn't resolve. */
-    fun resolve(typeRef: FirTypeRef, owner: FirRegularClassSymbol): ConeKotlinType?
+    fun returnType(declaration: FirCallableDeclaration, owner: FirRegularClassSymbol): ConeKotlinType?
+
+    fun parameterType(parameter: FirValueParameter, owner: FirRegularClassSymbol): ConeKotlinType?
+
+    fun superTypes(symbol: FirRegularClassSymbol): List<ConeKotlinType>
 
     fun isSubtype(actual: ConeKotlinType, expected: ConeKotlinType): Boolean
 
     fun isEqual(first: ConeKotlinType, second: ConeKotlinType): Boolean
 }
 
-/** After supertype resolution: explicit types are resolved (inferred ones once bodies are), and the compiler's checker is safe. */
+/**
+ * After supertype resolution: explicit types are resolved (inferred ones once bodies are), and the compiler's checker is
+ * safe to use.
+ *
+ * Types are read through symbols rather than from declarations. IntelliJ resolves each declaration on demand, so asking
+ * a symbol resolves it if needed; reading the declaration directly would see an unresolved type and find no match.
+ */
 internal class ResolvedTypes(private val session: FirSession) : TypeLookup {
-    override fun resolve(typeRef: FirTypeRef, owner: FirRegularClassSymbol): ConeKotlinType? =
-        (typeRef as? FirResolvedTypeRef)?.coneType?.takeUnless { it is ConeErrorType }
+    override fun returnType(declaration: FirCallableDeclaration, owner: FirRegularClassSymbol): ConeKotlinType? =
+        runCatching { declaration.symbol.resolvedReturnType }.getOrNull()?.takeUnless { it is ConeErrorType }
+
+    override fun parameterType(parameter: FirValueParameter, owner: FirRegularClassSymbol): ConeKotlinType? =
+        runCatching { parameter.symbol.resolvedReturnType }.getOrNull()?.takeUnless { it is ConeErrorType }
+
+    override fun superTypes(symbol: FirRegularClassSymbol): List<ConeKotlinType> =
+        runCatching { symbol.resolvedSuperTypes }.getOrDefault(emptyList())
 
     override fun isSubtype(actual: ConeKotlinType, expected: ConeKotlinType): Boolean =
         AbstractTypeChecker.isSubtypeOf(session.typeContext, actual, expected)
@@ -69,7 +89,16 @@ internal class SupertypePhaseTypes(
     private val currentClass: FirRegularClassSymbol? = null,
     private val currentClassResolver: FirSupertypeGenerationExtension.TypeResolveService? = null,
 ) : TypeLookup {
-    override fun resolve(typeRef: FirTypeRef, owner: FirRegularClassSymbol): ConeKotlinType? {
+    override fun returnType(declaration: FirCallableDeclaration, owner: FirRegularClassSymbol): ConeKotlinType? =
+        resolve(declaration.returnTypeRef, owner)
+
+    override fun parameterType(parameter: FirValueParameter, owner: FirRegularClassSymbol): ConeKotlinType? =
+        resolve(parameter.returnTypeRef, owner)
+
+    override fun superTypes(symbol: FirRegularClassSymbol): List<ConeKotlinType> =
+        symbol.fir.superTypeRefs.mapNotNull { resolve(it, symbol) }
+
+    private fun resolve(typeRef: FirTypeRef, owner: FirRegularClassSymbol): ConeKotlinType? {
         val type = when {
             typeRef is FirResolvedTypeRef -> typeRef.coneType
             typeRef is FirImplicitTypeRef -> null
