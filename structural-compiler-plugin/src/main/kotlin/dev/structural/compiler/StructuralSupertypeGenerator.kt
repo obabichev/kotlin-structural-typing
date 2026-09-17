@@ -1,23 +1,25 @@
-@file:OptIn(DirectDeclarationsAccess::class)
-
 package dev.structural.compiler
 
+import org.jetbrains.kotlin.KtFakeSourceElementKind
+import org.jetbrains.kotlin.descriptors.ClassKind
+import org.jetbrains.kotlin.fakeElement
 import org.jetbrains.kotlin.fir.FirSession
-import org.jetbrains.kotlin.fir.declarations.DirectDeclarationsAccess
 import org.jetbrains.kotlin.fir.declarations.FirClassLikeDeclaration
-import org.jetbrains.kotlin.fir.declarations.FirProperty
 import org.jetbrains.kotlin.fir.declarations.FirRegularClass
 import org.jetbrains.kotlin.fir.extensions.FirDeclarationPredicateRegistrar
 import org.jetbrains.kotlin.fir.extensions.FirSupertypeGenerationExtension
 import org.jetbrains.kotlin.fir.types.ConeKotlinType
 import org.jetbrains.kotlin.fir.types.FirResolvedTypeRef
-import org.jetbrains.kotlin.fir.types.FirUserTypeRef
+import org.jetbrains.kotlin.fir.types.builder.buildResolvedTypeRef
 import org.jetbrains.kotlin.fir.types.classId
 import org.jetbrains.kotlin.fir.types.coneType
 import org.jetbrains.kotlin.fir.types.constructClassLikeType
 
 /** Adds every @Structural interface that a class matches as a supertype of that class. */
 class StructuralSupertypeGenerator(session: FirSession) : FirSupertypeGenerationExtension(session) {
+    private val fileScopes = FileScopes(session)
+    private val structuralInterfaces by lazy { session.structuralInterfaces(SupertypePhaseTypes(session, fileScopes)) }
+
     override fun FirDeclarationPredicateRegistrar.registerPredicates() {
         register(STRUCTURAL_PREDICATE)
     }
@@ -31,19 +33,26 @@ class StructuralSupertypeGenerator(session: FirSession) : FirSupertypeGeneration
         typeResolver: TypeResolveService,
     ): List<ConeKotlinType> {
         val klass = classLikeDeclaration as? FirRegularClass ?: return emptyList()
+        val types = SupertypePhaseTypes(session, fileScopes, klass.symbol, typeResolver)
         val existing = resolvedSupertypes.mapNotNull { it.coneType.classId }.toSet()
-        val ownProperties = klass.declarations.filterIsInstance<FirProperty>()
-        val inheritedProperties = session.superclassProperties(resolvedSupertypes)
-        // Inferred property types are resolved much later; such properties can't match (see InferredPropertyTypesChecker).
-        val types = PropertyTypes { property ->
-            when (val typeRef = property.returnTypeRef) {
-                is FirResolvedTypeRef -> typeRef.coneType
-                is FirUserTypeRef -> typeResolver.resolveUserType(typeRef).coneType
-                else -> null
+        val members = session.classMembers(klass.symbol, resolvedSupertypes, types)
+        val added = structuralInterfaces
+            .filter { it.classId !in existing && session.implementsByShape(members, it, types) }
+            .map { it.classId.constructClassLikeType(emptyArray(), isMarkedNullable = false) }
+
+        if (klass.classKind == ClassKind.ENUM_CLASS && added.isNotEmpty()) {
+            // The command-line compiler only writes computed supertypes back to classes that started with an unresolved
+            // or implicit supertype (FirApplySupertypesTransformer.applyResolvedSupertypesToClass, Kotlin 2.4.20). An enum
+            // class starts with an already resolved `Enum<E>`, so returned supertypes would be dropped there: add them to
+            // the class directly as well. IntelliJ (LLFirSuperTypeTargetResolver) always replaces the supertypes with the
+            // computed ones, so they must also be returned.
+            val present = klass.superTypeRefs.mapNotNull { (it as? FirResolvedTypeRef)?.coneType?.classId }.toSet()
+            val source = klass.source?.fakeElement(KtFakeSourceElementKind.PluginGenerated.Default)
+            val missing = added.filter { it.classId !in present }
+            if (missing.isNotEmpty()) {
+                klass.replaceSuperTypeRefs(klass.superTypeRefs + missing.map { buildResolvedTypeRef { coneType = it; this.source = source } })
             }
         }
-        return session.structuralInterfaces()
-            .filter { it.classId !in existing && session.matches(ownProperties, inheritedProperties, it, types) }
-            .map { it.classId.constructClassLikeType(emptyArray(), isMarkedNullable = false) }
+        return added
     }
 }

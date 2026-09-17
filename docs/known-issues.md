@@ -6,18 +6,19 @@ Issues of the compiler plugin proof of concept. Items marked **verified** are co
 
 ## Using the library
 
-### 1. Inferred property types don't match (verified)
+### 1. Inferred types don't match (verified)
 
 ```kotlin
 class Square(val side: Int) {
     val width get() = side   // inferred type
     val height: Int get() = side
+    fun area() = side * side // inferred return type
 }
-size(Square(3))  // e: Argument type mismatch: actual type is 'Square', but 'Sized' was expected.
 ```
 
-Supertypes are decided early in compilation, before inferred types are resolved. The plugin reports a warning naming
-the properties to fix, but the class doesn't implement the interface until their types are declared.
+Supertypes are decided early in compilation, before inferred types are resolved, so such members can't satisfy a
+requirement. The plugin reports a warning naming the members to fix, but the class doesn't implement the interface until
+their types are declared.
 
 ### 2. Interfaces must be declared in the module being compiled (verified)
 
@@ -30,14 +31,17 @@ libraries compiled with the plugin could fix this.
 Only classes compiled in the current module can gain a supertype. A class from a library, or from another module of the
 same project, is never a `Sized`, even if its shape matches.
 
-### 4. Enum classes are not supported (verified)
+### 4. Types nested in classes can't be resolved while matching (verified)
 
-The compiler ignores supertypes a plugin adds to enum classes, so the plugin skips them.
+A requirement like `val kind: Kind` where `Kind` is nested inside the interface doesn't resolve during supertype
+resolution (only file-level imports are used), so no class matches it. It compiles, but silently doesn't match.
+See the roadmap.
 
 ### 5. Some `@Structural` interfaces are ignored (verified)
 
-Interfaces with type parameters, abstract functions or superinterfaces are never added to classes. Adding them could
-leave a class with unimplemented members and break its compilation. No diagnostic is reported for these yet.
+Interfaces with type parameters anywhere in their hierarchy, generic or extension members, or superinterfaces that
+don't resolve are never added to classes. Adding them could leave a class with unimplemented members and break its
+compilation. No diagnostic is reported for these yet. Generic interfaces are on the roadmap.
 
 ### 6. Matching changes existing code's behavior
 
@@ -90,19 +94,34 @@ The plugin uses the experimental compiler plugin API and opts into internal FIR 
 In the spike, incremental builds recompiled callers correctly when a class stopped matching and when the interface gained
 a property. The module was small, so Gradle may have recompiled everything; larger modules are untested.
 
-### 11. Generic superclasses are skipped when collecting inherited properties
+### 11. Subtyping during supertype resolution is simplified (verified)
 
-Properties inherited from a generic superclass (`open class Box<T>(val width: T)`) are not considered, because their
-types would need substitution.
+While deciding supertypes the plugin can't use the compiler's type checker (doing so broke unrelated code like
+`val b: Base = Derived()`; there is a regression test). Its own comparison:
+
+- handles plain class types by walking declared supertypes, independent of file order
+- requires types with arguments to be equal: `List<String>` doesn't satisfy `List<CharSequence>`
+- compares Java platform types by their non-null form
+- never matches members of generic superclasses whose types use type parameters
+
+### 12. Enum classes depend on how each compiler applies supertypes
+
+The command-line compiler (Gradle) doesn't write computed supertypes back to enum classes, so the plugin adds the
+interface to the enum class directly. IntelliJ's compiler (`LLFirSuperTypeTargetResolver`) always replaces the supertypes
+with the computed ones and would drop the directly added interface, so the plugin also returns it.
+
+The first version only added it directly: the build worked, but in IntelliJ enum classes didn't implement the interface
+(`listOf(Product(…), Priority.HIGH)` showed `List<Any>` instead of `List<Labeled>`). The fix follows the IDE code but
+isn't confirmed in IntelliJ yet, and no automated test runs IntelliJ's compiler (see the roadmap).
 
 ## Development notes
 
-### 12. Gradle needs JDK 17
+### 13. Gradle needs JDK 17
 
 Gradle 9.7.1 doesn't run on JDK 11, the default `java` on the development machine. Run builds with
 `JAVA_HOME=$(/usr/libexec/java_home -v 17) ./gradlew build`. Modules use `jvmToolchain(17)`.
 
-### 13. Building the IntelliJ plugin
+### 14. Building the IntelliJ plugin
 
 - The module compiles against a full IntelliJ distribution. Pass `-Pstructural.ideaPath=/path/to/IntelliJ IDEA.app` to
   use a local installation; otherwise Gradle downloads IntelliJ IDEA 2026.2.
@@ -112,18 +131,18 @@ Gradle 9.7.1 doesn't run on JDK 11, the default `java` on the development machin
 - The compiler plugin copy must not be in the plugin's `lib/` directory: the Kotlin IDE plugin loads it in its own class
   loader. The IntelliJ Platform Gradle plugin also adds `plugin.xml` to every source set, so the copy excludes it.
 
-### 14. Finding compiler APIs
+### 15. Finding compiler APIs
 
 The FIR plugin API is mostly undocumented. Signatures were found with `javap` on `kotlin-compiler-embeddable-2.4.20.jar`.
 Some constructors are internal (e.g. `KtDiagnosticFactoryToRendererMap`; use the top-level
 `KtDiagnosticFactoryToRendererMap(name) { … }` builder), and checkers use context parameters.
 
-### 15. Compiler symbols can't be used after compilation
+### 16. Compiler symbols can't be used after compilation
 
 FIR symbols belong to a compiler session. In tests, inspect them only inside the compilation (e.g. through the plugin),
 never after `compile()` returns.
 
-### 16. Soft keywords in test sources
+### 17. Soft keywords in test sources
 
 In a test snippet, `companion object` followed by `private class Hidden` on the next line parses as a companion
 **named** `private`. Put companion objects last or give them a body `{}`.

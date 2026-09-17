@@ -13,13 +13,13 @@ import org.jetbrains.kotlin.psi.KtElement
  * to `org.jetbrains.kotlin.com.intellij`, which doesn't exist when the IDE runs the plugin.
  */
 object StructuralDiagnostics : KtDiagnosticsContainer() {
-    val INFERRED_PROPERTY_TYPES by warning1<KtElement, String>(SourceElementPositioningStrategies.DECLARATION_NAME)
+    val INFERRED_MEMBER_TYPES by warning1<KtElement, String>(SourceElementPositioningStrategies.DECLARATION_NAME)
 
     override fun getRendererFactory(): BaseDiagnosticRendererFactory = Renderers
 
     private object Renderers : BaseDiagnosticRendererFactory() {
         override val MAP by KtDiagnosticFactoryToRendererMap("Structural") {
-            it.put(INFERRED_PROPERTY_TYPES, "{0}", CommonRenderers.STRING)
+            it.put(INFERRED_MEMBER_TYPES, "{0}", CommonRenderers.STRING)
         }
     }
 }

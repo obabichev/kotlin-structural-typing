@@ -3,102 +3,198 @@
 package dev.structural.compiler
 
 import org.jetbrains.kotlin.descriptors.ClassKind
+import org.jetbrains.kotlin.descriptors.Modality
 import org.jetbrains.kotlin.descriptors.Visibilities
+import org.jetbrains.kotlin.descriptors.Visibility
 import org.jetbrains.kotlin.fir.FirSession
 import org.jetbrains.kotlin.fir.declarations.DirectDeclarationsAccess
+import org.jetbrains.kotlin.fir.declarations.FirCallableDeclaration
+import org.jetbrains.kotlin.fir.declarations.FirDeclarationOrigin
 import org.jetbrains.kotlin.fir.declarations.FirNamedFunction
 import org.jetbrains.kotlin.fir.declarations.FirProperty
 import org.jetbrains.kotlin.fir.extensions.predicate.LookupPredicate
 import org.jetbrains.kotlin.fir.extensions.predicateBasedProvider
+import org.jetbrains.kotlin.fir.resolve.ScopeSession
 import org.jetbrains.kotlin.fir.resolve.providers.symbolProvider
+import org.jetbrains.kotlin.fir.scopes.processAllFunctions
+import org.jetbrains.kotlin.fir.scopes.processAllProperties
+import org.jetbrains.kotlin.fir.scopes.unsubstitutedScope
 import org.jetbrains.kotlin.fir.symbols.SymbolInternals
+import org.jetbrains.kotlin.fir.symbols.impl.FirPropertySymbol
 import org.jetbrains.kotlin.fir.symbols.impl.FirRegularClassSymbol
-import org.jetbrains.kotlin.fir.types.ConeKotlinType
-import org.jetbrains.kotlin.fir.types.FirResolvedTypeRef
+import org.jetbrains.kotlin.fir.types.ConeTypeParameterType
 import org.jetbrains.kotlin.fir.types.FirTypeRef
 import org.jetbrains.kotlin.fir.types.classId
-import org.jetbrains.kotlin.fir.types.coneType
-import org.jetbrains.kotlin.fir.types.typeContext
+import org.jetbrains.kotlin.fir.types.contains
+import org.jetbrains.kotlin.name.ClassId
 import org.jetbrains.kotlin.name.FqName
+import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.name.StandardClassIds
-import org.jetbrains.kotlin.types.AbstractTypeChecker
 
 internal val STRUCTURAL_ANNOTATION = FqName("dev.structural.Structural")
 internal val STRUCTURAL_PREDICATE = LookupPredicate.create { annotated(STRUCTURAL_ANNOTATION) }
 
-/**
- * Kinds of classes that can gain a @Structural interface as a supertype. Enum classes are excluded: the compiler ignores
- * supertypes a plugin adds to them.
- */
-internal val MATCHABLE_CLASS_KINDS = setOf(ClassKind.CLASS, ClassKind.OBJECT)
+/** Kinds of classes that can gain a @Structural interface as a supertype. */
+internal val MATCHABLE_CLASS_KINDS = setOf(ClassKind.CLASS, ClassKind.OBJECT, ClassKind.ENUM_CLASS)
 
-/**
- * @Structural interfaces declared in the module being compiled that a class can implement by having matching properties:
- * interfaces without type parameters, abstract functions or superinterfaces. Adding any other interface could leave the
- * class with unimplemented members, which would break its compilation.
- */
-internal fun FirSession.structuralInterfaces(): List<FirRegularClassSymbol> =
+/** A property or function together with the class or interface declaring it, whose file decides how its types resolve. */
+internal class Member(val declaration: FirCallableDeclaration, val owner: FirRegularClassSymbol) {
+    val name: Name? = when (declaration) {
+        is FirProperty -> declaration.name
+        is FirNamedFunction -> declaration.name
+        else -> null
+    }
+}
+
+/** A @Structural interface that classes can implement by shape, and the abstract members they must provide. */
+internal class StructuralInterface(val symbol: FirRegularClassSymbol, val requirements: List<Member>) {
+    val classId: ClassId get() = symbol.classId
+}
+
+/** The usable @Structural interfaces declared in the module being compiled. */
+internal fun FirSession.structuralInterfaces(types: TypeLookup): List<StructuralInterface> =
     predicateBasedProvider.getSymbolsByPredicate(STRUCTURAL_PREDICATE)
         .filterIsInstance<FirRegularClassSymbol>()
-        .filter { iface ->
-            iface.classKind == ClassKind.INTERFACE &&
-                iface.fir.typeParameters.isEmpty() &&
-                iface.fir.declarations.none { it is FirNamedFunction && it.body == null } &&
-                iface.fir.superTypeRefs.all { (it as? FirResolvedTypeRef)?.coneType?.classId == StandardClassIds.Any }
-        }
-
-/** Abstract properties declared directly in [iface]; properties with a default getter are not required. */
-internal fun requiredProperties(iface: FirRegularClassSymbol): List<FirProperty> =
-    iface.fir.declarations.filterIsInstance<FirProperty>().filter { it.getter?.body == null }
-
-/** How to get a property's type. During supertype resolution only explicitly declared types are available. */
-internal fun interface PropertyTypes {
-    fun of(property: FirProperty): ConeKotlinType?
-}
-
-/** Properties of the superclass chain (not interfaces), farthest first so that nearer declarations win. */
-internal fun FirSession.superclassProperties(supertypeRefs: List<FirTypeRef>): List<FirProperty> {
-    val result = mutableListOf<FirProperty>()
-    var current = superclassOf(supertypeRefs)
-    while (current != null) {
-        result.addAll(0, current.fir.declarations.filterIsInstance<FirProperty>())
-        current = superclassOf(current.fir.superTypeRefs)
-    }
-    return result
-}
-
-private fun FirSession.superclassOf(supertypeRefs: List<FirTypeRef>): FirRegularClassSymbol? =
-    supertypeRefs
-        .mapNotNull { (it as? FirResolvedTypeRef)?.coneType?.classId }
-        .mapNotNull { symbolProvider.getClassLikeSymbolByClassId(it) as? FirRegularClassSymbol }
-        .firstOrNull { it.classKind == ClassKind.CLASS && it.fir.typeParameters.isEmpty() }
+        .filter { it.classKind == ClassKind.INTERFACE }
+        .mapNotNull { structuralInterface(it, types) }
 
 /**
- * Whether a class with [ownProperties] and [inheritedProperties] can implement [iface] under Kotlin override rules:
- * every required property exists and is public, a `val` may have a subtype, and a `var` must be a `var` of exactly
- * the same type with a public setter.
+ * Collects the abstract members of [iface] and all its superinterfaces. Returns null when a class can't safely implement
+ * the interface by shape: type parameters anywhere in the hierarchy, generic or extension members, or superinterfaces
+ * that don't resolve. Adding such an interface could leave a class with members it doesn't implement.
  */
-internal fun FirSession.matches(
-    ownProperties: List<FirProperty>,
-    inheritedProperties: List<FirProperty>,
-    iface: FirRegularClassSymbol,
-    types: PropertyTypes,
-): Boolean {
-    val required = requiredProperties(iface)
-    if (required.isEmpty()) return false
-    val properties = (inheritedProperties + ownProperties).associateBy { it.name }
-    return required.all { requirement ->
-        val property = properties[requirement.name] ?: return false
-        if (!property.status.visibility.isPublicOrDefault()) return false
-        if (requirement.isVar && (!property.isVar || property.setter?.status?.visibility?.isPublicOrDefault() == false)) {
-            return false
+private fun FirSession.structuralInterface(iface: FirRegularClassSymbol, types: TypeLookup): StructuralInterface? {
+    val requirements = mutableListOf<Member>()
+    // Members with an implementation in a more derived interface are not required from its superinterfaces.
+    val implemented = mutableSetOf<String>()
+    val visited = mutableSetOf<ClassId>()
+
+    fun collect(symbol: FirRegularClassSymbol): Boolean {
+        if (!visited.add(symbol.classId)) return true
+        if (symbol.fir.typeParameters.isNotEmpty()) return false
+        for (declaration in declaredMembers(symbol)) {
+            val member = Member(declaration, symbol)
+            val key = member.overrideKey()
+            if (!isAbstract(declaration)) {
+                implemented += key
+                continue
+            }
+            if (key in implemented) continue
+            if (declaration.typeParameters.isNotEmpty() || declaration.receiverParameter != null) return false
+            requirements += member
         }
-        val expected = types.of(requirement) ?: return false
-        val actual = types.of(property) ?: return false
-        if (requirement.isVar) actual == expected else AbstractTypeChecker.isSubtypeOf(typeContext, actual, expected)
+        for (superTypeRef in symbol.fir.superTypeRefs) {
+            val classId = types.resolve(superTypeRef, symbol)?.classId ?: return false
+            if (classId == StandardClassIds.Any) continue
+            val superSymbol = symbolProvider.getClassLikeSymbolByClassId(classId) as? FirRegularClassSymbol ?: return false
+            if (superSymbol.classKind != ClassKind.INTERFACE || !collect(superSymbol)) return false
+        }
+        return true
+    }
+
+    if (!collect(iface) || requirements.isEmpty()) return null
+    return StructuralInterface(iface, requirements)
+}
+
+private fun Member.overrideKey(): String = when (val declaration = declaration) {
+    is FirNamedFunction -> "fun $name/${declaration.valueParameters.size}"
+    else -> "val $name"
+}
+
+/** Kotlin source declarations aren't status-resolved yet at the supertype phase; everything else has a modality. */
+private fun isAbstract(declaration: FirCallableDeclaration): Boolean {
+    if (declaration.origin != FirDeclarationOrigin.Source) return declaration.status.modality == Modality.ABSTRACT
+    return when (declaration) {
+        is FirProperty -> declaration.getter?.body == null && declaration.initializer == null && declaration.delegate == null
+        is FirNamedFunction -> declaration.body == null
+        else -> false
     }
 }
 
-/** Before status resolution, an unspecified visibility is [Visibilities.Unknown], which means public here. */
-private fun org.jetbrains.kotlin.descriptors.Visibility.isPublicOrDefault(): Boolean =
-    this == Visibilities.Public || this == Visibilities.Unknown
+/**
+ * Direct properties and functions of [symbol]. Members of Java classes come from the class's member scope, which has
+ * their types converted to Kotlin; the Java declarations themselves are only converted lazily.
+ */
+private fun FirSession.declaredMembers(symbol: FirRegularClassSymbol): List<FirCallableDeclaration> {
+    if (symbol.fir.origin !is FirDeclarationOrigin.Java) {
+        return symbol.fir.declarations.filter { it is FirProperty || it is FirNamedFunction }.map { it as FirCallableDeclaration }
+    }
+    val scope = symbol.unsubstitutedScope(this, ScopeSession(), withForcedTypeCalculator = false, memberRequiredPhase = null)
+    val members = mutableListOf<FirCallableDeclaration>()
+    scope.processAllFunctions { if (it.callableId.classId == symbol.classId) members += it.fir }
+    scope.processAllProperties { if (it is FirPropertySymbol && it.callableId?.classId == symbol.classId) members += it.fir }
+    return members
+}
+
+/** Properties and functions of [klass] and its superclass chain, nearest first. */
+internal fun FirSession.classMembers(klass: FirRegularClassSymbol, supertypeRefs: List<FirTypeRef>, types: TypeLookup): List<Member> {
+    val members = mutableListOf<Member>()
+    var current: FirRegularClassSymbol? = klass
+    var currentSupertypes = supertypeRefs
+    val visited = mutableSetOf<ClassId>()
+    while (current != null && visited.add(current.classId)) {
+        val owner = current
+        declaredMembers(current).mapTo(members) { Member(it, owner) }
+        // Members of generic superclasses are collected too; those whose types use type parameters never match.
+        val superclass = currentSupertypes
+            .mapNotNull { types.resolve(it, owner)?.classId }
+            .mapNotNull { symbolProvider.getClassLikeSymbolByClassId(it) as? FirRegularClassSymbol }
+            .firstOrNull { it.classKind == ClassKind.CLASS }
+        current = superclass
+        currentSupertypes = superclass?.fir?.superTypeRefs.orEmpty()
+    }
+    return members
+}
+
+/** Whether [members] of a class provide every requirement of [iface]. */
+internal fun FirSession.implementsByShape(members: List<Member>, iface: StructuralInterface, types: TypeLookup): Boolean =
+    iface.requirements.all { requirement -> members.any { satisfies(it, requirement, types) } }
+
+/**
+ * Whether [member] of a class can implement [requirement] under Kotlin override rules, without the class declaring the
+ * interface: same name, public, not generic or an extension, and
+ * - property: `val` may have a subtype, `var` must be a `var` of exactly the same type with a public setter; not `const`
+ * - function: same `suspend`, same parameter names, `vararg` and exact types, no default values (an override can't
+ *   declare them), not `inline`, and a return type that is the same or a subtype
+ */
+internal fun FirSession.satisfies(member: Member, requirement: Member, types: TypeLookup): Boolean {
+    val candidate = member.declaration
+    val required = requirement.declaration
+    if (member.name == null || member.name != requirement.name) return false
+    if (candidate.receiverParameter != null || candidate.typeParameters.isNotEmpty()) return false
+    if (!candidate.status.visibility.isPublicOrDefault()) return false
+
+    // Types involving type parameters (of a generic superclass) would need substitution: treat them as unknown.
+    fun type(typeRef: FirTypeRef, owner: FirRegularClassSymbol) =
+        types.resolve(typeRef, owner)?.takeUnless { type -> type.contains { it is ConeTypeParameterType } }
+    val expectedReturn = type(required.returnTypeRef, requirement.owner) ?: return false
+    val actualReturn = type(candidate.returnTypeRef, member.owner) ?: return false
+
+    return when {
+        required is FirProperty && candidate is FirProperty -> {
+            if (candidate.status.isConst) return false
+            if (!required.isVar) return types.isSubtype(actualReturn, expectedReturn)
+            candidate.isVar &&
+                candidate.setter?.status?.visibility?.isPublicOrDefault() != false &&
+                types.isEqual(actualReturn, expectedReturn)
+        }
+        required is FirNamedFunction && candidate is FirNamedFunction -> {
+            if (candidate.status.isSuspend != required.status.isSuspend || candidate.status.isInline) return false
+            if (candidate.valueParameters.size != required.valueParameters.size) return false
+            val parametersMatch = candidate.valueParameters.zip(required.valueParameters).all { (actual, expected) ->
+                val actualType = type(actual.returnTypeRef, member.owner)
+                val expectedType = type(expected.returnTypeRef, requirement.owner)
+                actual.name == expected.name &&
+                    actual.isVararg == expected.isVararg &&
+                    actual.defaultValue == null &&
+                    actualType != null && expectedType != null &&
+                    types.isEqual(actualType, expectedType)
+            }
+            parametersMatch && types.isSubtype(actualReturn, expectedReturn)
+        }
+        else -> false
+    }
+}
+
+/** Before status resolution an unspecified visibility is [Visibilities.Unknown], which means public here. */
+private fun Visibility.isPublicOrDefault(): Boolean = this == Visibilities.Public || this == Visibilities.Unknown

@@ -42,3 +42,23 @@ val SIZED = kotlin(
     fun size(target: Sized) = target.width * target.height
     """,
 )
+
+/**
+ * `test.Shape` with a property, three abstract functions and one with a default implementation, and `measure(Shape)`
+ * calling all of them.
+ */
+val SHAPE = kotlin(
+    "Shape.kt",
+    """
+    package test
+    import dev.structural.Structural
+    @Structural interface Shape {
+        val name: String
+        fun area(): Int
+        fun scaled(factor: Int): Int
+        fun describe(): CharSequence
+        fun label(): String = "${'$'}name:${'$'}{area()}"
+    }
+    fun measure(shape: Shape) = shape.label() + "/" + shape.scaled(2) + "/" + shape.describe()
+    """,
+)

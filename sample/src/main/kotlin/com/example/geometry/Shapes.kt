@@ -18,6 +18,16 @@ interface Counter {
     var count: Int
 }
 
+interface Named {
+    val name: String
+}
+
+/** Functions and superinterface members are required too: a class needs `name` and `label()`. */
+@Structural
+interface Labeled : Named {
+    fun label(): String
+}
+
 // Ordinary functions: any class with a matching shape is a Sized, Measurable or Counter.
 
 fun size(target: Sized) = target.width * target.height
@@ -49,3 +59,5 @@ class Canvas(val name: String) {
         fun sizedFor(target: Sized) = Canvas("${target.width}x${target.height}")
     }
 }
+
+fun describeAll(items: List<Labeled>) = items.joinToString { "${it.name}=${it.label()}" }

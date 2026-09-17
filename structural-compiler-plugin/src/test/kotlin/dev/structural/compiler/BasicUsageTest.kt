@@ -4,7 +4,12 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-class StructuralTypingTest {
+/**
+ * What implementing an interface by shape gives you: a matching class really implements the interface, so it can be
+ * passed anywhere the interface is expected, is found by `is` checks, keeps its identity, and works in collections,
+ * generics, varargs and nullable positions. Matching doesn't depend on where classes and interfaces are declared.
+ */
+class BasicUsageTest {
     @Test
     fun `matching class can be passed where the interface is expected`() {
         val compiled = compile(
@@ -92,51 +97,6 @@ class StructuralTypingTest {
     }
 
     @Test
-    fun `val accepts a subtype and var requires the exact type`() {
-        val compiled = compile(
-            kotlin(
-                "Main.kt",
-                """
-                package test
-                import dev.structural.Structural
-                @Structural interface Measurable { val length: Number }
-                @Structural interface Counter { var count: Int }
-                class Rope(val length: Int)
-                class Clicks(var count: Int)
-                fun describe(target: Measurable) = target.length.toString()
-                fun increment(target: Counter) { target.count++ }
-                fun run(): String {
-                    val clicks = Clicks(1)
-                    increment(clicks)
-                    return describe(Rope(5)) + clicks.count
-                }
-                """,
-            ),
-        )
-        assertEquals("52", compiled.run())
-    }
-
-    @Test
-    fun `subclasses and inherited properties`() {
-        val compiled = compile(
-            SIZED,
-            kotlin(
-                "Main.kt",
-                """
-                package test
-                open class Frame(val width: Int, val height: Int)
-                class PictureFrame : Frame(10, 20)
-                open class Base(val width: Int)
-                class Tall(val height: Int) : Base(1)
-                class Window : Frame(3, 4), Sized
-                fun run() = listOf(size(PictureFrame()), size(Tall(7)), size(Window()))
-                """,
-            ),
-        )
-        assertEquals(listOf(200, 7, 12), compiled.run())
-    }
-
-    @Test
     fun `objects`() {
         val compiled = compile(
             SIZED,
@@ -150,26 +110,5 @@ class StructuralTypingTest {
             ),
         )
         assertEquals(6, compiled.run())
-    }
-
-    @Test
-    fun `interface properties with a default getter are not required`() {
-        val compiled = compile(
-            kotlin(
-                "Main.kt",
-                """
-                package test
-                import dev.structural.Structural
-                @Structural interface Shape {
-                    val width: Int
-                    val label: String get() = "shape"
-                }
-                class Line(val width: Int)
-                fun describe(shape: Shape) = shape.label + shape.width
-                fun run() = describe(Line(3))
-                """,
-            ),
-        )
-        assertEquals("shape3", compiled.run())
     }
 }

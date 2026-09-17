@@ -30,10 +30,11 @@ A **K2 compiler plugin** makes every matching class in the module **actually imp
 written `class Rectangular(...) : Sized`. It hooks into three phases of the compiler frontend (FIR):
 
 1. **Supertypes** (`FirSupertypeGenerationExtension`): for each class, the plugin checks every `@Structural` interface
-   of the module. If the class's properties match, the interface is added as a supertype.
-2. **Status** (`FirStatusTransformerExtension`): properties that implement an added interface are marked `override`.
-3. **Checkers** (`FirAdditionalCheckersExtension`): a warning for classes that would match except that some property
-   types are inferred (see "Inferred property types").
+   of the module. If the class's properties and functions match, the interface is added as a supertype.
+2. **Status** (`FirStatusTransformerExtension`): properties and functions that implement an added interface are marked
+   `override`, matched by full signature.
+3. **Checkers** (`FirAdditionalCheckersExtension`): a warning for classes that would match except that some member
+   types are inferred (see "Inferred member types").
 
 After that the compiler does everything else itself: override checks, bridge methods (e.g. for `Int` implementing
 `Number`), bytecode (`class Rectangular implements Sized`), incremental compilation.
@@ -79,56 +80,85 @@ the IDE plugin in `.idea/externalDependencies.xml`, so IntelliJ suggests install
 Plugin files:
 
 1. **StructuralPluginRegistrar**: registers the FIR extensions and diagnostics.
-2. **StructuralInterfaces**: finds usable `@Structural` interfaces and decides whether properties match.
-3. **StructuralSupertypeGenerator**: adds matched interfaces as supertypes.
-4. **StructuralOverrideMarker**: marks implementing properties `override`.
-5. **StructuralCheckers** / **StructuralDiagnostics**: the inferred-property-types warning.
+2. **StructuralInterfaces**: finds usable `@Structural` interfaces, collects their required members and a class's
+   members, and decides whether a member satisfies a requirement.
+3. **StructuralTypes**: how types are resolved and compared in each compiler phase (see "Types during supertype
+   resolution").
+4. **StructuralSupertypeGenerator**: adds matched interfaces as supertypes.
+5. **StructuralOverrideMarker**: marks implementing properties and functions `override`.
+6. **StructuralCheckers** / **StructuralDiagnostics**: the inferred-member-types warning.
 
 ## Rules
 
 ### `@Structural` interfaces
 
-The plugin uses a `@Structural` interface only if it is declared in the module being compiled and has:
+The plugin uses a `@Structural` interface declared in the module being compiled. Its **required members** are the
+abstract properties and functions of the interface and of all its superinterfaces (Kotlin or Java, annotated or not),
+except members that a more derived interface implements (e.g. `override fun greet() = "hi $name"`). Members with a
+default implementation are never required. A class that gets the interface also implements its superinterfaces.
 
-- no type parameters
-- no abstract functions
-- no superinterfaces
+The interface is ignored, and never added to any class, if:
 
-Other `@Structural` interfaces are ignored. Adding them could leave a class with members it doesn't implement, which
-would break its compilation.
+- it or any superinterface has type parameters
+- a required member has type parameters or an extension receiver
+- a superinterface can't be resolved
 
-**Required properties** are the interface's abstract properties. Properties with a default getter
-(`val label: String get() = "shape"`) are not required.
+Adding such an interface could leave a class with members it doesn't implement, which would break its compilation.
+Generic interfaces are planned; see [`docs/roadmap.md`](docs/roadmap.md).
 
 ### Candidate classes
 
-Classes and objects (including nested ones) declared in the module being compiled. Not:
-
-- enum classes (the compiler ignores supertypes a plugin adds to them)
-- interfaces, annotation classes
-- classes from dependencies (their bytecode can't be changed)
+Classes, objects and enum classes (including nested ones) declared in the module being compiled. Not interfaces,
+annotation classes or classes from dependencies (their bytecode can't be changed).
 
 A class that already lists the interface in its source is left alone; if it forgets `override`, that is the normal
 compiler error.
 
+Enum classes need special handling: the compiler only writes computed supertypes back to classes that start with an
+unresolved or implicit supertype, and an enum class starts with an already resolved `Enum<E>`. The plugin therefore adds
+the interface to an enum class directly.
+
 ### Matching (Kotlin override rules)
 
-A class matches an interface if, for every required property `p: T`, the class declares or inherits (from its superclass
-chain, excluding generic superclasses) a property `p` that is public, and:
+A class's members are its own properties and functions plus those inherited from its superclass chain. A member
+satisfies a requirement if it has the same name, is public, has no type parameters or extension receiver, and:
 
-- `val p: T` required: a `val` or `var` of type `S` where `S` is a subtype of `T` (`Int` satisfies `Number`)
-- `var p: T` required: a `var` of exactly type `T` with a public setter
+- **`val p: T`**: a `val` or `var` of a subtype of `T` (`Int` satisfies `Number`), not `const`
+- **`var p: T`**: a `var` of exactly `T` with a public setter
+- **`fun f(a: A, …): R`**:
+  - same `suspend`
+  - same parameter names, `vararg` and exact parameter types
+  - no default values (an override can't declare them)
+  - not `inline`
+  - a return type that is `R` or a subtype
 
-Property types must be **declared explicitly**. Supertypes are decided before inferred types are known.
+Types from generic superclasses that use type parameters (e.g. `compareTo(other: E)` from `Enum<E>`) never match;
+their other members do (the built-in `name: String` of every enum class can satisfy `val name: String`).
 
-### Inferred property types
+Types must be **declared explicitly**: supertypes are decided before inferred types are known.
 
-If a class would match with its resolved types but some required properties have inferred types, it doesn't implement
-the interface and the plugin reports a warning:
+### Types during supertype resolution
+
+Supertypes are decided in the compiler's supertype phase, so the plugin has to resolve and compare types itself:
+
+- Each type is resolved with the imports of the file that declares it, the same way the compiler builds file scopes.
+  `Color` in an interface and `Color` in a class compare as the classes they refer to.
+- The compiler's type checker is never used in this phase. It would compute and cache supertypes of classes the
+  compiler hasn't processed yet, and unrelated code (`val b: Base = Derived()`) would then fail to compile. Instead:
+  - types are compared structurally
+  - subtyping walks declared supertypes, each resolved in its own file, so the result doesn't depend on file order
+  - types with arguments must be equal
+
+After that phase (override marking, the warning), the compiler's resolved types and type checker are used.
+
+### Inferred member types
+
+If a class would match with its resolved types but some matching members have inferred types, it doesn't implement the
+interface and the plugin reports a warning:
 
 ```
-w: 'Square' matches @Structural interface 'com.example.Sized' but doesn't implement it, because these properties
-   have inferred types: width. Declare their types explicitly.
+w: 'Square' matches @Structural interface 'com.example.Sized' but doesn't implement it, because these members have
+   inferred types: width. Declare their types explicitly.
 ```
 
 No warning is reported if the class wouldn't match even with its resolved types.
@@ -136,15 +166,19 @@ No warning is reported if the class wouldn't match even with its resolved types.
 ## Testing
 
 - **Plugin tests** (`structural-compiler-plugin`) compile snippets with the plugin using kotlin-compile-testing
-  (`dev.zacsweers.kctfork:core`) and run the result:
-  - `StructuralTypingTest`: matching cases (functions of every shape, identity, `is` checks, collections, packages and
-    declaration order, `Int` for `Number`, `var` write-through, subclasses, inherited properties, objects, default getters)
-  - `NonMatchingTest`: cases that must not match or must keep normal errors (wrong types, missing or private properties,
-    private setters, interfaces with functions, superinterfaces or type parameters, enums, interfaces from other modules,
-    missing `override` on a declared supertype)
-  - `InferredPropertyTypesTest`: the warning
-- **`sample`**: a real Gradle build using the plugin through `kotlinCompilerPluginClasspath`, covering the same
-  user-facing cases, including a matching class that is never used.
+  (`dev.zacsweers.kctfork:core`) and run the result. One file per feature, each starting with a short description:
+  - `BasicUsageTest`: what implementing by shape gives (identity, `is` checks, collections, any function shape)
+  - `PropertiesTest`: property requirements
+  - `FunctionsTest`: function requirements
+  - `SuperinterfacesTest`: members of Kotlin and Java superinterfaces
+  - `InheritanceTest`: superclasses, subclasses, classes declaring the interface themselves
+  - `EnumClassesTest`: enum classes
+  - `TypeResolutionTest`: types resolved in the right file, file order, compiler state, nested types
+  - `UnsupportedInterfacesTest`: interfaces that are never added
+  - `InferredMemberTypesTest`: the warning
+- **`sample`**: a real Gradle build using the plugin through `kotlinCompilerPluginClasspath`, with one test file per
+  user-facing feature (`BasicUsageTest`, `CallSitesTest`, `PropertiesTest`, `InheritanceTest`, `EnumClassesTest`,
+  `FunctionsAndSuperinterfacesTest`).
 - **`structural-intellij-plugin`**: unit tests for recognizing the compiler plugin jar, and `verifyPluginStructure`.
   Whether the IDE actually loads the plugin is checked manually in IntelliJ.
 
@@ -157,12 +191,5 @@ No warning is reported if the class wouldn't match even with its resolved types.
 
 ## Future work
 
-See [`docs/known-issues.md`](docs/known-issues.md) for the details behind these.
-
-- Interfaces from other modules: libraries compiled with the plugin could emit an index of their `@Structural`
-  interfaces, which consumers list through the compiler's symbol names provider. Listing a dependency package at the
-  supertype phase was verified in the spike.
-- Superinterfaces of `@Structural` interfaces, generic interfaces, and matching functions, not only properties.
-- Enum classes.
-- A Gradle plugin, publishing the IntelliJ plugin to JetBrains Marketplace, and supporting more IDE versions.
-- Classes from dependencies can never gain supertypes; they would need generated adapters as in the KSP version.
+Planned work is tracked in [`docs/roadmap.md`](docs/roadmap.md); current limitations are in
+[`docs/known-issues.md`](docs/known-issues.md).
