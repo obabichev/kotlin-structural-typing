@@ -46,6 +46,7 @@ signature. Member types have to be written explicitly, because supertypes are de
 |---|---|
 | `structural-annotations` | The `@Structural` annotation |
 | `structural-compiler-plugin` | The K2 compiler plugin |
+| `structural-gradle-plugin` | Gradle plugin that applies both to a module |
 | `structural-intellij-plugin` | IntelliJ plugin so the IDE analyzes code the same way as the build |
 | `sample` | A Gradle module using the plugin; its tests show every supported case |
 
@@ -54,6 +55,7 @@ signature. Member types have to be written explicitly, because supertypes are de
 | [`proposal.md`](proposal.md) | Design, matching rules, testing, project history |
 | [`docs/known-issues.md`](docs/known-issues.md) | Current limitations, with what has been verified |
 | [`docs/roadmap.md`](docs/roadmap.md) | Planned work, starting with generics |
+| [`docs/publishing.md`](docs/publishing.md) | How the artifacts are published |
 
 ## Trying it
 
@@ -66,7 +68,22 @@ JAVA_HOME=$(/usr/libexec/java_home -v 17) ./gradlew :structural-compiler-plugin:
 The sample's tests are the best place to see what works: one file per feature under
 `sample/src/test/kotlin/com/example/`.
 
-To use the plugin in a module of this project:
+### Using it in your own project
+
+Apply the Gradle plugin; it adds the annotation and the compiler plugin:
+
+```kotlin
+plugins {
+    kotlin("jvm") version "2.4.20"
+    id("io.github.obabichev.structural") version "0.1.0-kotlin-2.4.20"
+}
+```
+
+The version names the Kotlin version, because the compiler plugin uses internal compiler APIs and works with that one
+only. The artifacts are not on Maven Central yet; until then, publish them locally with `./gradlew publishToMavenLocal`
+and add `mavenLocal()` to your repositories. See [`docs/publishing.md`](docs/publishing.md).
+
+Modules inside this repository wire the plugin up directly instead, as `sample/build.gradle.kts` shows:
 
 ```kotlin
 dependencies {
@@ -91,13 +108,18 @@ Then install `structural-intellij-plugin/build/distributions/structural-intellij
 Gradle downloads IntelliJ IDEA 2026.2 to build against. The plugin supports IntelliJ 2026.2 (`262.*`) only, because each
 IDE version bundles a different Kotlin compiler.
 
+## License
+
+[Apache License 2.0](LICENSE).
+
 ## Status
 
-A proof of concept: 62 tests cover the supported cases, and the whole build passes without compiler warnings. It is not
-published anywhere and not ready for production. The main limitations:
+A proof of concept: 64 tests cover the supported cases, and the whole build passes without compiler warnings. It is not
+published yet and not ready for production. The main limitations:
 
 - generic interfaces and generic members are ignored ([roadmap](docs/roadmap.md))
-- interfaces and classes must be declared in the module being compiled
+- interfaces and the classes matching them must be compiled in the same module; other modules can then use those
+  classes through the interface
 - member types must be explicit
 - the plugin uses internal, experimental compiler APIs, so expect breakage on Kotlin updates
 

@@ -17,4 +17,10 @@ dependencyResolutionManagement {
 
 rootProject.name = "kotlin-structural-typing"
 
-include(":structural-annotations", ":structural-compiler-plugin", ":structural-intellij-plugin", ":sample")
+include(
+    ":structural-annotations",
+    ":structural-compiler-plugin",
+    ":structural-gradle-plugin",
+    ":structural-intellij-plugin",
+    ":sample",
+)
