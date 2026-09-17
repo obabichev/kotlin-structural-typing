@@ -1,6 +1,7 @@
 [versions]
 kotlin = "2.4.20"
 kctfork = "0.14.0"
+intellij-platform = "2.19.0"
 
 [libraries]
 kotlin-compiler-embeddable = { module = "org.jetbrains.kotlin:kotlin-compiler-embeddable", version.ref = "kotlin" }
@@ -8,3 +9,4 @@ kctfork-core = { module = "dev.zacsweers.kctfork:core", version.ref = "kctfork" 
 
 [plugins]
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
+intellij-platform = { id = "org.jetbrains.intellij.platform", version.ref = "intellij-platform" }

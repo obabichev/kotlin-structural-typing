@@ -1,5 +1,9 @@
 .gradle/
 build/
 .kotlin/
-.idea/
+.idea/*
+!.idea/externalDependencies.xml
+.intellijPlatform/
 *.iml
+*.hprof
+.DS_Store

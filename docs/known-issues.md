@@ -54,10 +54,29 @@ Every matching class in the module really implements the interface, including cl
 Adding, removing or retyping a property can add or remove an interface from a public class's bytecode, without any
 change to the class declaration. Binary-compatibility checks will see it.
 
-### 8. IDE support is unverified
+### 8. The IDE needs the Structural Typing IntelliJ plugin
 
-The K2 IntelliJ plugin, as far as we know, loads only bundled compiler plugins by default. Calls like
-`size(Rectangular(...))` are then likely shown as errors in the editor while the Gradle build succeeds.
+IntelliJ's K2 mode only runs compiler plugins bundled with the IDE (registry key
+`kotlin.k2.only.bundled.compiler.plugins.enabled`, default `true`). Without help, calls like `size(Rectangular(...))`
+show `Argument type mismatch: actual type is 'Rectangular', but 'Sized' was expected.` while the Gradle build succeeds
+(verified in IntelliJ IDEA 2026.2.0.1).
+
+The `structural-intellij-plugin` module fixes this without changing IDE settings. The Kotlin IDE plugin asks every
+`org.jetbrains.kotlin.bundledFirCompilerPluginProvider` for a replacement of each compiler plugin jar from the build,
+and uses a returned jar even when only bundled plugins are allowed (verified by reading
+`KtCompilerPluginsCache.substitutePluginJar` in IntelliJ 2026.2). Our provider returns a copy of the compiler plugin
+compiled against the IDE's own Kotlin compiler (`2.4.20-dev-6724` in 2026.2.0.1).
+
+Remaining limits:
+
+- Users still install the IntelliJ plugin once. `.idea/externalDependencies.xml` makes IntelliJ suggest it, but until
+  it is published on JetBrains Marketplace it has to be installed from disk
+  (`structural-intellij-plugin/build/distributions/structural-intellij-plugin.zip`).
+- It supports IntelliJ 2026.2 (`262.*`) only. Every IDE version bundles a different Kotlin compiler, so each supported
+  version needs its own build of the compiler plugin copy.
+- Loading in a running IDE was checked manually in IntelliJ IDEA 2026.2.0.1 (errors disappear with the plugin installed and
+  default registry settings); there is no automated IDE test yet.
+- The project must be trusted in IntelliJ; untrusted projects don't run any compiler plugins.
 
 ## Plugin implementation
 
@@ -83,18 +102,28 @@ types would need substitution.
 Gradle 9.7.1 doesn't run on JDK 11, the default `java` on the development machine. Run builds with
 `JAVA_HOME=$(/usr/libexec/java_home -v 17) ./gradlew build`. Modules use `jvmToolchain(17)`.
 
-### 13. Finding compiler APIs
+### 13. Building the IntelliJ plugin
+
+- The module compiles against a full IntelliJ distribution. Pass `-Pstructural.ideaPath=/path/to/IntelliJ IDEA.app` to
+  use a local installation; otherwise Gradle downloads IntelliJ IDEA 2026.2.
+- IntelliJ 2026.2 is compiled for Java 25, so the module uses a Java 25 toolchain, downloaded by the Foojay resolver.
+- Compiling against the IDE classpath needs more memory: `gradle.properties` sets 4 GB for Gradle and the Kotlin daemon.
+- Plugin IDs must not contain the word `intellij` (plugin verifier rule).
+- The compiler plugin copy must not be in the plugin's `lib/` directory: the Kotlin IDE plugin loads it in its own class
+  loader. The IntelliJ Platform Gradle plugin also adds `plugin.xml` to every source set, so the copy excludes it.
+
+### 14. Finding compiler APIs
 
 The FIR plugin API is mostly undocumented. Signatures were found with `javap` on `kotlin-compiler-embeddable-2.4.20.jar`.
 Some constructors are internal (e.g. `KtDiagnosticFactoryToRendererMap`; use the top-level
 `KtDiagnosticFactoryToRendererMap(name) { … }` builder), and checkers use context parameters.
 
-### 14. Compiler symbols can't be used after compilation
+### 15. Compiler symbols can't be used after compilation
 
 FIR symbols belong to a compiler session. In tests, inspect them only inside the compilation (e.g. through the plugin),
 never after `compile()` returns.
 
-### 15. Soft keywords in test sources
+### 16. Soft keywords in test sources
 
 In a test snippet, `companion object` followed by `private class Hidden` on the next line parses as a companion
 **named** `private`. Put companion objects last or give them a body `{}`.

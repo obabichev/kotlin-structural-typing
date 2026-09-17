@@ -60,12 +60,20 @@ dependencies {
 Requires Kotlin 2.4.20 with the K2 compiler. A published version would ship a Gradle plugin instead of the classpath
 dependency.
 
+**IDE.** IntelliJ's K2 mode only runs compiler plugins bundled with the IDE, so without help the editor shows
+`Argument type mismatch` errors that the build doesn't have. The `Structural Typing` IntelliJ plugin
+(`structural-intellij-plugin`) fixes this without any IDE settings: it registers the Kotlin plugin's
+`org.jetbrains.kotlin.bundledFirCompilerPluginProvider` extension point, recognizes the structural compiler plugin in a
+project's build, and hands the IDE its own copy of it, compiled against the IDE's Kotlin compiler. The project declares
+the IDE plugin in `.idea/externalDependencies.xml`, so IntelliJ suggests installing it when the project is opened.
+
 ## Modules
 
 | Module | Contents |
 |---|---|
 | `structural-annotations` | `@Structural` (`@Target(CLASS)`, `@Retention(BINARY)`) |
 | `structural-compiler-plugin` | The K2 compiler plugin, registered through `META-INF/services` |
+| `structural-intellij-plugin` | IntelliJ plugin (ID `dev.structural.ide`, IntelliJ 2026.2) that makes the IDE run the compiler plugin |
 | `sample` | A Gradle module using the plugin; its tests are the end-to-end check |
 
 Plugin files:
@@ -137,6 +145,8 @@ No warning is reported if the class wouldn't match even with its resolved types.
   - `InferredPropertyTypesTest`: the warning
 - **`sample`**: a real Gradle build using the plugin through `kotlinCompilerPluginClasspath`, covering the same
   user-facing cases, including a matching class that is never used.
+- **`structural-intellij-plugin`**: unit tests for recognizing the compiler plugin jar, and `verifyPluginStructure`.
+  Whether the IDE actually loads the plugin is checked manually in IntelliJ.
 
 ## Success criteria for the PoC
 
@@ -154,5 +164,5 @@ See [`docs/known-issues.md`](docs/known-issues.md) for the details behind these.
   supertype phase was verified in the spike.
 - Superinterfaces of `@Structural` interfaces, generic interfaces, and matching functions, not only properties.
 - Enum classes.
-- A Gradle plugin, and checking IDE support (the K2 IDE plugin doesn't load third-party compiler plugins by default).
+- A Gradle plugin, publishing the IntelliJ plugin to JetBrains Marketplace, and supporting more IDE versions.
 - Classes from dependencies can never gain supertypes; they would need generated adapters as in the KSP version.
