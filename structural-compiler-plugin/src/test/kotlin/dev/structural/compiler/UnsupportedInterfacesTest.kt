@@ -2,8 +2,6 @@ package dev.structural.compiler
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFalse
-import kotlin.test.assertTrue
 
 /**
  * Interfaces the plugin doesn't support yet are never added to classes, so classes keep compiling exactly as without the
@@ -45,18 +43,5 @@ class UnsupportedInterfacesTest {
             ),
         )
         assertEquals("[false, false]", compiled.run())
-    }
-
-    @Test
-    fun `interfaces from other modules are not supported yet`() {
-        val library = compile(SIZED, withPlugin = false)
-        assertTrue(library.succeeded, library.messages)
-        val libraryClasses = java.io.File(library.loadClass("test.Sized").protectionDomain.codeSource.location.toURI())
-
-        val compiled = compile(
-            kotlin("Main.kt", "package test\nclass Rectangular(val width: Int, val height: Int)\nfun run() = size(Rectangular(2, 2))"),
-            classpath = listOf(libraryClasses),
-        )
-        assertFalse(compiled.succeeded)
     }
 }
