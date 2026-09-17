@@ -4,6 +4,10 @@ import com.example.geometry.Sized
 
 class Rectangular(val width: Int, val height: Int, val color: String)
 
+class Rectangular2(val width: Int, val height: Int, val color: String)
+
+class Rectangular3(val width: Int, val height: Int, val color: String)
+
 class Rope(val length: Int)
 
 class Clicks(var count: Int)

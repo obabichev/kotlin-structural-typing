@@ -1,10 +1,10 @@
 package dev.structural
 
 /**
- * Marks an interface whose shape, not its name, decides which classes a function accepts.
+ * Marks an interface that classes implement by shape rather than by declaration.
  *
- * The KSP processor generates overloads of functions taking this interface for every class in the
- * configured packages whose properties match it.
+ * With the structural compiler plugin applied, every class in the module whose properties match the interface's
+ * abstract properties is compiled as if it declared the interface as a supertype.
  */
 @Target(AnnotationTarget.CLASS)
 @Retention(AnnotationRetention.BINARY)

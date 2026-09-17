@@ -1,6 +1,5 @@
 plugins {
     alias(libs.plugins.kotlin.jvm)
-    alias(libs.plugins.ksp)
 }
 
 kotlin {
@@ -9,7 +8,7 @@ kotlin {
 
 dependencies {
     implementation(project(":structural-annotations"))
-    ksp(project(":structural-processor"))
+    kotlinCompilerPluginClasspath(project(":structural-compiler-plugin"))
     testImplementation(kotlin("test"))
 }
 

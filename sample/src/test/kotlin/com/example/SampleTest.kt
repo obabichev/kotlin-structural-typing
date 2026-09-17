@@ -1,22 +1,22 @@
 package com.example
 
 import com.example.geometry.Canvas
+import com.example.geometry.Sized
 import com.example.geometry.area
-import com.example.geometry.asMeasurable
-import com.example.geometry.asSized
 import com.example.geometry.describe
 import com.example.geometry.describeOrNone
-import com.example.geometry.fits
 import com.example.geometry.increment
 import com.example.geometry.label
+import com.example.geometry.larger
 import com.example.geometry.size
 import com.example.geometry.sizeLater
-import com.example.geometry.sizedFor
 import com.example.geometry.totalArea
 import com.example.geometry.totalSize
 import com.example.model.Clicks
 import com.example.model.PictureFrame
 import com.example.model.Rectangular
+import com.example.model.Rectangular2
+import com.example.model.Rectangular3
 import com.example.model.Rope
 import com.example.model.Window
 import kotlin.coroutines.Continuation
@@ -31,36 +31,54 @@ class SampleTest {
     @Test
     fun `original example`() {
         assertEquals(2, size(Rectangular(1, 2, "red")))
+        assertEquals(2, size(Rectangular3(1, 2, "red")))
     }
 
     @Test
-    fun `member function`() {
+    fun `matching classes implement the interface even when unused`() {
+        assertTrue(Sized::class.java.isAssignableFrom(Rectangular2::class.java))
+    }
+
+    @Test
+    fun `member and companion object functions`() {
         assertTrue(Canvas("main").fits(Rectangular(10, 10, "red")))
-    }
-
-    @Test
-    fun `companion object function`() {
         assertEquals("4x5", Canvas.sizedFor(Rectangular(4, 5, "red")).name)
     }
 
     @Test
-    fun `extension function with another receiver`() {
+    fun `extension functions`() {
         assertEquals("box 3x4", "box".label(Rectangular(3, 4, "blue")))
-    }
-
-    @Test
-    fun `extension function on the interface`() {
         assertEquals(6, Rectangular(2, 3, "red").area())
     }
 
     @Test
-    fun `nullable parameter`() {
-        assertEquals("2x3none", describeOrNone(Rectangular(2, 3, "red")) + describeOrNone(null))
+    fun `nullable values`() {
+        val maybe: Rectangular? = Rectangular(2, 3, "red")
+        assertEquals("2x3none", describeOrNone(maybe) + describeOrNone(null))
     }
 
     @Test
-    fun `vararg parameter`() {
-        assertEquals(14, totalSize(Rectangular(1, 2, "red"), Rectangular(3, 4, "blue")))
+    fun `vararg with different classes`() {
+        assertEquals(202, totalSize(Rectangular(1, 2, "red"), PictureFrame("oak")))
+    }
+
+    @Test
+    fun `collections and generics`() {
+        val rectangles: List<Rectangular> = listOf(Rectangular(1, 2, "red"), Rectangular(3, 4, "blue"))
+        assertEquals(14, totalArea(rectangles))
+        assertEquals("blue", larger(rectangles[0], rectangles[1]).color)
+    }
+
+    @Test
+    fun `default parameter and Int for Number`() {
+        assertEquals("5 m", describe(Rope(5)))
+    }
+
+    @Test
+    fun `var writes through to the object`() {
+        val clicks = Clicks(1)
+        increment(clicks)
+        assertEquals(2, clicks.count)
     }
 
     @Test
@@ -72,36 +90,15 @@ class SampleTest {
     }
 
     @Test
-    fun `var writes through to the original object`() {
-        val clicks = Clicks(1)
-        increment(clicks)
-        assertEquals(2, clicks.count)
-    }
-
-    @Test
-    fun `subclass uses the base class overload`() {
+    fun `subclasses and nominal implementors`() {
         assertEquals(200, size(PictureFrame("oak")))
-    }
-
-    @Test
-    fun `nominal subclass of a structural match`() {
         assertEquals(1200, size(Window()))
     }
 
     @Test
-    fun `adapter for a function with a default parameter`() {
-        assertEquals("5 m", describe(Rope(5).asMeasurable()))
-    }
-
-    @Test
-    fun `adapters in a collection`() {
-        val shapes = listOf(Rectangular(1, 2, "red").asSized(), PictureFrame("oak").asSized(), Window().asSized())
-        assertEquals(1402, totalArea(shapes))
-    }
-
-    @Test
-    fun `adapter keeps identity for nominal implementors`() {
-        val window = Window()
-        assertSame(window, window.asSized())
+    fun `the object itself is passed, not a wrapper`() {
+        val rect = Rectangular(1, 1, "red")
+        val sized: Sized = rect
+        assertSame(rect, sized)
     }
 }

@@ -18,7 +18,7 @@ interface Counter {
     var count: Int
 }
 
-// Plain functions: every class matching the interface can be passed directly.
+// Ordinary functions: any class with a matching shape is a Sized, Measurable or Counter.
 
 fun size(target: Sized) = target.width * target.height
 
@@ -32,6 +32,12 @@ fun describeOrNone(target: Sized?) = target?.let { "${it.width}x${it.height}" } 
 
 fun totalSize(vararg targets: Sized) = targets.sumOf { size(it) }
 
+fun totalArea(items: List<Sized>) = items.sumOf { size(it) }
+
+fun <T : Sized> larger(a: T, b: T): T = if (size(a) >= size(b)) a else b
+
+fun describe(target: Measurable, unit: String = "m") = "${target.length} $unit"
+
 fun increment(target: Counter) {
     target.count++
 }
@@ -43,9 +49,3 @@ class Canvas(val name: String) {
         fun sizedFor(target: Sized) = Canvas("${target.width}x${target.height}")
     }
 }
-
-// Shapes overloads can't express: callers convert with adapters, e.g. describe(Rope(5).asMeasurable()).
-
-fun describe(target: Measurable, unit: String = "m") = "${target.length} $unit"
-
-fun totalArea(items: List<Sized>) = items.sumOf { size(it) }
