@@ -26,7 +26,10 @@ subprojects {
     apply(plugin = "com.vanniktech.maven.publish")
     extensions.configure<MavenPublishBaseExtension> {
         publishToMavenCentral()
-        if (providers.gradleProperty("signingInMemoryKey").isPresent) signAllPublications()
+        // Maven Central requires signatures; local publishing works without a key (see docs/publishing.md).
+        val hasSigningKey = listOf("signingInMemoryKey", "signing.keyId", "signing.gnupg.keyName")
+            .any { providers.gradleProperty(it).isPresent }
+        if (hasSigningKey) signAllPublications()
         pom {
             this.name = displayName
             description = "Structural typing for Kotlin: classes whose members match a @Structural interface can be " +

@@ -53,12 +53,26 @@ These steps need an account and a signing key, so they can't be scripted here.
    ```properties
    mavenCentralUsername=<user token name from the Central Portal>
    mavenCentralPassword=<user token value>
-   signingInMemoryKey=<the exported secret key, without the BEGIN/END lines>
+
+   # one way to provide the key: the ASCII-armored secret key, BEGIN/END lines removed, newlines kept as \n
+   signingInMemoryKey=<exported secret key>
    signingInMemoryKeyPassword=<key passphrase>
+
+   # or, with the key in the local GnuPG keyring instead:
+   # signing.gnupg.keyName=<KEY_ID>
+   # signing.gnupg.passphrase=<key passphrase>
    ```
-   The build signs artifacts only when `signingInMemoryKey` is set, so local publishing works without a key. See the
-   [gradle-maven-publish-plugin docs](https://vanniktech.github.io/gradle-maven-publish-plugin/central/) for other ways
-   to provide the key, such as `useGpgCmd()`.
+   Without any of these, `publishAndReleaseToMavenCentral` fails with `mavenCentralUsername not found`. Artifacts are
+   signed when `signingInMemoryKey`, `signing.keyId` or `signing.gnupg.keyName` is set, so local publishing keeps
+   working without a key. The
+   [gradle-maven-publish-plugin docs](https://vanniktech.github.io/gradle-maven-publish-plugin/central/) describe the
+   key formats in detail.
+
+   For a one-off run without storing anything, the same values work as environment variables:
+   ```bash
+   ORG_GRADLE_PROJECT_mavenCentralUsername=... ORG_GRADLE_PROJECT_mavenCentralPassword=... \
+     JAVA_HOME=$(/usr/libexec/java_home -v 17) ./gradlew publishAndReleaseToMavenCentral
+   ```
 
 ## Publishing a version
 
