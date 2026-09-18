@@ -75,7 +75,7 @@ Apply the Gradle plugin; it adds the annotation and the compiler plugin:
 ```kotlin
 plugins {
     kotlin("jvm") version "2.4.20"
-    id("io.github.obabichev.structural") version "0.1.0-kotlin-2.4.20"
+    id("com.obabichev.structural") version "0.1.0-kotlin-2.4.20"
 }
 ```
 

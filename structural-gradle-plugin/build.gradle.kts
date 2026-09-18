@@ -38,7 +38,7 @@ kotlin.sourceSets.named("main") {
 gradlePlugin {
     plugins {
         create("structural") {
-            id = "io.github.obabichev.structural"
+            id = "com.obabichev.structural"
             implementationClass = "dev.structural.gradle.StructuralGradlePlugin"
             displayName = "Structural typing for Kotlin"
             description = "Lets classes whose members match a @Structural interface be used as that interface."

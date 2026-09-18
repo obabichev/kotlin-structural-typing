@@ -1,12 +1,13 @@
 # Publishing
 
-Three artifacts are published to Maven Central under `io.github.obabichev.structural`:
+Three artifacts are published to Maven Central under `com.obabichev.structural`, inside the verified namespace
+`com.obabichev`:
 
 | Artifact | Contents |
 |---|---|
 | `structural-annotations` | The `@Structural` annotation |
 | `structural-compiler-plugin` | The K2 compiler plugin |
-| `structural-gradle-plugin` | The Gradle plugin, applied as `io.github.obabichev.structural` |
+| `structural-gradle-plugin` | The Gradle plugin, applied as `com.obabichev.structural` |
 
 The version names the Kotlin version it works with, e.g. `0.1.0-kotlin-2.4.20`, because the compiler plugin uses
 internal compiler APIs. Bump the Kotlin part when moving to a new Kotlin release; see `build.gradle.kts`.
@@ -26,7 +27,7 @@ repositories:
 ```kotlin
 plugins {
     kotlin("jvm") version "2.4.20"
-    id("io.github.obabichev.structural") version "0.1.0-kotlin-2.4.20"
+    id("com.obabichev.structural") version "0.1.0-kotlin-2.4.20"
 }
 ```
 
@@ -37,9 +38,11 @@ so nothing else is needed.
 
 These steps need an account and a signing key, so they can't be scripted here.
 
-1. **Create a Sonatype account** at [central.sonatype.com](https://central.sonatype.com) and **verify the namespace**
-   `io.github.obabichev`. For `io.github.*` namespaces, verification is done through the matching GitHub account.
-2. **Generate a signing key** and publish the public half, because Maven Central only accepts signed artifacts:
+1. **Sign in** at [central.sonatype.com](https://central.sonatype.com). The namespace `com.obabichev` is already
+   verified; *Namespaces* lists it and *Deployments* shows past uploads. Publishing needs a **user token** from
+   *Account → Generate User Token*, not the login password.
+2. **Generate a signing key** and publish the public half, because Maven Central only accepts signed artifacts.
+   GnuPG isn't installed on the development machine yet (`brew install gnupg`):
    ```bash
    gpg --full-generate-key
    gpg --list-secret-keys --keyid-format=long          # note the key id

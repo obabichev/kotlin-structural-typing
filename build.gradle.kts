@@ -9,7 +9,7 @@ plugins {
 // Published artifacts share these coordinates. The version names the Kotlin version, because the compiler plugin uses
 // internal compiler APIs and only works with that one.
 allprojects {
-    group = "io.github.obabichev.structural"
+    group = "com.obabichev.structural"
     version = "0.1.0-kotlin-2.4.20"
 }
 
