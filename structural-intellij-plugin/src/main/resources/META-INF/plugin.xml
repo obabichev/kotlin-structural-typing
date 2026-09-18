@@ -1,7 +1,7 @@
 <idea-plugin>
-    <id>dev.structural.ide</id>
+    <id>com.obabichev.structural.ide</id>
     <name>Structural Typing</name>
-    <vendor>dev.structural</vendor>
+    <vendor>com.obabichev.structural</vendor>
     <description><![CDATA[
         Runs the structural typing Kotlin compiler plugin during code analysis in K2 mode, so classes matching
         <code>@Structural</code> interfaces are analyzed the same way as in the Gradle build, without changing any
@@ -13,6 +13,6 @@
 
     <extensions defaultExtensionNs="org.jetbrains.kotlin">
         <supportsKotlinPluginMode supportsK2="true" supportsK1="false"/>
-        <bundledFirCompilerPluginProvider implementation="dev.structural.intellij.StructuralCompilerPluginProvider"/>
+        <bundledFirCompilerPluginProvider implementation="com.obabichev.structural.ide.StructuralCompilerPluginProvider"/>
     </extensions>
 </idea-plugin>

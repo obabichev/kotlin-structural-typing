@@ -11,7 +11,7 @@ plugins {
 // internal compiler APIs and only works with that one.
 allprojects {
     group = "com.obabichev.structural"
-    version = "0.1.0-kotlin-2.4.20"
+    version = "0.2.0-kotlin-2.4.20"
 }
 
 // Artifacts published to Maven Central: the annotation, the compiler plugin and the Gradle plugin.

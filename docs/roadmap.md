@@ -55,7 +55,7 @@ Every matching class in the module implements the interface. Consider:
 
 ## Tooling
 
-- **Gradle plugin:** `plugins { id("dev.structural") }` adds the annotations and the compiler plugin and checks the
+- **Gradle plugin:** `plugins { id("com.obabichev.structural") }` adds the annotations and the compiler plugin and checks the
   Kotlin version.
 - **JetBrains Marketplace:** publish the IntelliJ plugin so the prompt from `.idea/externalDependencies.xml` installs it
   directly.

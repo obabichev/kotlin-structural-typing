@@ -9,7 +9,7 @@ Three artifacts are published to Maven Central under `com.obabichev.structural`,
 | `structural-compiler-plugin` | The K2 compiler plugin |
 | `structural-gradle-plugin` | The Gradle plugin, applied as `com.obabichev.structural` |
 
-The version names the Kotlin version it works with, e.g. `0.1.0-kotlin-2.4.20`, because the compiler plugin uses
+The version names the Kotlin version it works with, e.g. `0.2.0-kotlin-2.4.20`, because the compiler plugin uses
 internal compiler APIs. Bump the Kotlin part when moving to a new Kotlin release; see `build.gradle.kts`.
 
 The IntelliJ plugin is not on Maven Central. Its zip is attached to the matching
@@ -29,7 +29,7 @@ repositories:
 ```kotlin
 plugins {
     kotlin("jvm") version "2.4.20"
-    id("com.obabichev.structural") version "0.1.0-kotlin-2.4.20"
+    id("com.obabichev.structural") version "0.2.0-kotlin-2.4.20"
 }
 ```
 

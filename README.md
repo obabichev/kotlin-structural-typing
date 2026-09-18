@@ -21,7 +21,7 @@ pluginManagement {
 // build.gradle.kts
 plugins {
     kotlin("jvm") version "2.4.20"
-    id("com.obabichev.structural") version "0.1.0-kotlin-2.4.20"
+    id("com.obabichev.structural") version "0.2.0-kotlin-2.4.20"
 }
 ```
 
@@ -31,7 +31,7 @@ Kotlin version it works with.
 **2. Mark an interface and use any matching class:**
 
 ```kotlin
-import dev.structural.Structural
+import com.obabichev.structural.Structural
 import kotlin.math.PI
 
 @Structural

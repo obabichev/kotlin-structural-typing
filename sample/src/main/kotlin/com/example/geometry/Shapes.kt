@@ -1,6 +1,6 @@
 package com.example.geometry
 
-import dev.structural.Structural
+import com.obabichev.structural.Structural
 
 @Structural
 interface Sized {

@@ -74,7 +74,7 @@ the IDE plugin in `.idea/externalDependencies.xml`, so IntelliJ suggests install
 |---|---|
 | `structural-annotations` | `@Structural` (`@Target(CLASS)`, `@Retention(BINARY)`) |
 | `structural-compiler-plugin` | The K2 compiler plugin, registered through `META-INF/services` |
-| `structural-intellij-plugin` | IntelliJ plugin (ID `dev.structural.ide`, IntelliJ 2026.2) that makes the IDE run the compiler plugin |
+| `structural-intellij-plugin` | IntelliJ plugin (ID `com.obabichev.structural.ide`, IntelliJ 2026.2) that makes the IDE run the compiler plugin |
 | `sample` | A Gradle module using the plugin; its tests are the end-to-end check |
 
 Plugin files:
