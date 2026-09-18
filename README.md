@@ -3,25 +3,72 @@
 A proof of concept that brings **structural typing** to Kotlin with a K2 compiler plugin: any class whose properties and
 functions match an interface can be used as that interface, without declaring it.
 
+## Getting started
+
+**1. Apply the Gradle plugin.** It adds the `@Structural` annotation and the compiler plugin to the module:
+
 ```kotlin
+// settings.gradle.kts
+pluginManagement {
+    repositories {
+        mavenCentral()       // the plugin is on Maven Central, not the Gradle Plugin Portal
+        gradlePluginPortal()
+    }
+}
+```
+
+```kotlin
+// build.gradle.kts
+plugins {
+    kotlin("jvm") version "2.4.20"
+    id("com.obabichev.structural") version "0.1.0-kotlin-2.4.20"
+}
+```
+
+Kotlin **2.4.20** is required: the compiler plugin uses internal compiler APIs, which is why the version names the
+Kotlin version it works with.
+
+**2. Mark an interface and use any matching class:**
+
+```kotlin
+import dev.structural.Structural
+
 @Structural
 interface Sized {
     val width: Int
     val height: Int
+    fun area(): Int
 }
 
-fun size(target: Sized) = target.width * target.height
+// Knows nothing about Sized
+class Rectangular(val width: Int, val height: Int, val color: String) {
+    fun area(): Int = width * height
+}
 
-// Doesn't know about Sized
-class Rectangular(val width: Int, val height: Int, val color: String)
+enum class Paper(val width: Int, val height: Int) {
+    A4(210, 297);
 
-size(Rectangular(1, 2, "red"))                      // 2
-Rectangular(1, 2, "red") is Sized                   // true
-val shapes: List<Sized> = listOf(Rectangular(1, 2, "red"))
+    fun area(): Int = width * height
+}
+
+fun describe(target: Sized) = "${target.width}x${target.height}=${target.area()}"
+
+fun main() {
+    println(describe(Rectangular(1, 2, "red")))             // 1x2=2
+    println(Rectangular(1, 2, "red") is Sized)              // true
+
+    val shapes: List<Sized> = listOf(Rectangular(1, 2, "red"), Paper.A4)
+    println(shapes.sumOf { it.area() })                     // 62372
+}
 ```
 
-The only thing a user writes is `@Structural` on the interface. No annotations on classes or functions, no generated
-code, no wrappers, and no required Gradle options.
+Nothing is written on the classes: no annotations, no wrappers, no generated code. Member types have to be declared
+explicitly, and the interface and its matching classes must be compiled in the same module.
+
+**3. For IntelliJ,** install the IDE plugin, otherwise the editor reports `Argument type mismatch` errors that the build
+doesn't have: download the zip from the
+[latest release](https://github.com/obabichev/kotlin-structural-typing/releases/latest), install it through
+*Settings → Plugins → ⚙ → Install Plugin from Disk…* and reload the Gradle project. IntelliJ 2026.2 (`262.*`) only.
 
 ## How it works
 
@@ -37,8 +84,7 @@ implements the interface, identity is preserved (`===`), `is` checks work, and `
 
 A class matches when, for every abstract member of the interface and its superinterfaces, it has a public member that
 Kotlin would accept as an override: a `val` of a subtype, a `var` of exactly the same type, or a function with the same
-signature. Member types have to be written explicitly, because supertypes are decided before inferred types are known.
-[`proposal.md`](proposal.md) has the exact rules.
+signature. [`proposal.md`](proposal.md) has the exact rules.
 
 ## Repository layout
 
@@ -57,33 +103,17 @@ signature. Member types have to be written explicitly, because supertypes are de
 | [`docs/roadmap.md`](docs/roadmap.md) | Planned work, starting with generics |
 | [`docs/publishing.md`](docs/publishing.md) | How the artifacts are published |
 
-## Trying it
+## Working on this repository
 
-Requires JDK 17 for Gradle (Kotlin 2.4.20, K2).
+Gradle needs JDK 17:
 
 ```bash
 JAVA_HOME=$(/usr/libexec/java_home -v 17) ./gradlew :structural-compiler-plugin:test :sample:test
 ```
 
 The sample's tests are the best place to see what works: one file per feature under
-`sample/src/test/kotlin/com/example/`.
-
-### Using it in your own project
-
-Apply the Gradle plugin; it adds the annotation and the compiler plugin:
-
-```kotlin
-plugins {
-    kotlin("jvm") version "2.4.20"
-    id("com.obabichev.structural") version "0.1.0-kotlin-2.4.20"
-}
-```
-
-The artifacts are on Maven Central, so `mavenCentral()` in `pluginManagement` repositories is enough (the plugin is not
-on the Gradle Plugin Portal). The version names the Kotlin version, because the compiler plugin uses internal compiler
-APIs and works with that one only.
-
-Modules inside this repository wire the plugin up directly instead, as `sample/build.gradle.kts` shows:
+`sample/src/test/kotlin/com/example/`. Modules inside this repository wire the plugin up directly instead of applying
+the published one, as `sample/build.gradle.kts` shows:
 
 ```kotlin
 dependencies {
@@ -92,18 +122,7 @@ dependencies {
 }
 ```
 
-### IntelliJ
-
-IntelliJ's K2 mode only runs compiler plugins bundled with the IDE, so without help the editor reports
-`Argument type mismatch` errors that the build doesn't have. The IntelliJ plugin in this repository fixes that, with no
-IDE settings to change:
-
-Download the zip from the [latest release](https://github.com/obabichev/kotlin-structural-typing/releases/latest) and
-install it through *Settings → Plugins → ⚙ → Install Plugin from Disk…*, then reload the Gradle project. It is not on the
-JetBrains Marketplace yet, and it supports IntelliJ 2026.2 (`262.*`) only, because each IDE version bundles a different
-Kotlin compiler.
-
-To build it yourself instead:
+To build the IntelliJ plugin zip yourself:
 
 ```bash
 JAVA_HOME=$(/usr/libexec/java_home -v 17) ./gradlew :structural-intellij-plugin:buildPlugin \
