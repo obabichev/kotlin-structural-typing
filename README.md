@@ -32,6 +32,7 @@ Kotlin version it works with.
 
 ```kotlin
 import dev.structural.Structural
+import kotlin.math.PI
 
 @Structural
 interface Sized {
@@ -40,9 +41,12 @@ interface Sized {
     fun area(): Int
 }
 
-// Knows nothing about Sized
-class Rectangular(val width: Int, val height: Int, val color: String) {
-    fun area(): Int = width * height
+// Neither of these knows about Sized
+
+class Circle(val radius: Int) {
+    val width: Int get() = radius * 2
+    val height: Int get() = radius * 2
+    fun area(): Int = (PI * radius * radius).toInt()
 }
 
 enum class Paper(val width: Int, val height: Int) {
@@ -54,11 +58,11 @@ enum class Paper(val width: Int, val height: Int) {
 fun describe(target: Sized) = "${target.width}x${target.height}=${target.area()}"
 
 fun main() {
-    println(describe(Rectangular(1, 2, "red")))             // 1x2=2
-    println(Rectangular(1, 2, "red") is Sized)              // true
+    println(describe(Circle(3)))                            // 6x6=28
+    println(Circle(3) is Sized)                             // true
 
-    val shapes: List<Sized> = listOf(Rectangular(1, 2, "red"), Paper.A4)
-    println(shapes.sumOf { it.area() })                     // 62372
+    val shapes: List<Sized> = listOf(Circle(3), Paper.A4)
+    println(shapes.sumOf { it.area() })                     // 62398
 }
 ```
 
