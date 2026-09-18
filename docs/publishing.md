@@ -12,8 +12,10 @@ Three artifacts are published to Maven Central under `com.obabichev.structural`,
 The version names the Kotlin version it works with, e.g. `0.1.0-kotlin-2.4.20`, because the compiler plugin uses
 internal compiler APIs. Bump the Kotlin part when moving to a new Kotlin release; see `build.gradle.kts`.
 
-The IntelliJ plugin is not published here. It would go to the JetBrains Marketplace, which is a separate process
-(account, review, one build per supported IDE version).
+The IntelliJ plugin is not on Maven Central. Its zip is attached to the matching
+[GitHub release](https://github.com/obabichev/kotlin-structural-typing/releases), built with
+`./gradlew :structural-intellij-plugin:buildPlugin`. The JetBrains Marketplace would be the next step, and is a separate
+process (account, review, one build per supported IDE version).
 
 ## Trying it locally first
 
@@ -88,6 +90,10 @@ These steps need an account and a signing key, so they can't be scripted here.
    ```
    Use `publishToMavenCentral` instead to upload without releasing, and finish the release by hand in the Central
    Portal. Artifacts usually appear on Maven Central within an hour.
-5. Tag the release in git: `git tag v<version> && git push origin v<version>`.
+5. Tag the release in git and publish a GitHub release with the IntelliJ plugin zip attached:
+   ```bash
+   git tag v<version> && git push origin v<version>
+   gh release create v<version> structural-intellij-plugin/build/distributions/*.zip
+   ```
 
 **Published versions can't be changed or deleted.** Publish a new version instead.

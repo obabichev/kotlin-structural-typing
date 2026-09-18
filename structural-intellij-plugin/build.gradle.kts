@@ -55,7 +55,7 @@ intellijPlatform {
     buildSearchableOptions = false
     instrumentCode = false
     pluginConfiguration {
-        version = "0.1.0"
+        version = project.version.toString()
         ideaVersion {
             sinceBuild = "262"
             untilBuild = "262.*"

@@ -79,9 +79,9 @@ plugins {
 }
 ```
 
-The version names the Kotlin version, because the compiler plugin uses internal compiler APIs and works with that one
-only. The artifacts are not on Maven Central yet; until then, publish them locally with `./gradlew publishToMavenLocal`
-and add `mavenLocal()` to your repositories. See [`docs/publishing.md`](docs/publishing.md).
+The artifacts are on Maven Central, so `mavenCentral()` in `pluginManagement` repositories is enough (the plugin is not
+on the Gradle Plugin Portal). The version names the Kotlin version, because the compiler plugin uses internal compiler
+APIs and works with that one only.
 
 Modules inside this repository wire the plugin up directly instead, as `sample/build.gradle.kts` shows:
 
@@ -98,15 +98,19 @@ IntelliJ's K2 mode only runs compiler plugins bundled with the IDE, so without h
 `Argument type mismatch` errors that the build doesn't have. The IntelliJ plugin in this repository fixes that, with no
 IDE settings to change:
 
+Download the zip from the [latest release](https://github.com/obabichev/kotlin-structural-typing/releases/latest) and
+install it through *Settings → Plugins → ⚙ → Install Plugin from Disk…*, then reload the Gradle project. It is not on the
+JetBrains Marketplace yet, and it supports IntelliJ 2026.2 (`262.*`) only, because each IDE version bundles a different
+Kotlin compiler.
+
+To build it yourself instead:
+
 ```bash
 JAVA_HOME=$(/usr/libexec/java_home -v 17) ./gradlew :structural-intellij-plugin:buildPlugin \
     "-Pstructural.ideaPath=/Applications/IntelliJ IDEA.app"
 ```
 
-Then install `structural-intellij-plugin/build/distributions/structural-intellij-plugin.zip` through
-*Settings → Plugins → ⚙ → Install Plugin from Disk…* and reload the Gradle project. Without `-Pstructural.ideaPath`,
-Gradle downloads IntelliJ IDEA 2026.2 to build against. The plugin supports IntelliJ 2026.2 (`262.*`) only, because each
-IDE version bundles a different Kotlin compiler.
+Without `-Pstructural.ideaPath`, Gradle downloads IntelliJ IDEA 2026.2 to build against.
 
 ## License
 
@@ -114,8 +118,8 @@ IDE version bundles a different Kotlin compiler.
 
 ## Status
 
-A proof of concept: 64 tests cover the supported cases, and the whole build passes without compiler warnings. It is not
-published yet and not ready for production. The main limitations:
+A proof of concept: 64 tests cover the supported cases, and the whole build passes without compiler warnings. It is
+published for trying out, not for production use. The main limitations:
 
 - generic interfaces and generic members are ignored ([roadmap](docs/roadmap.md))
 - interfaces and the classes matching them must be compiled in the same module; other modules can then use those
