@@ -1,4 +1,5 @@
 import com.vanniktech.maven.publish.MavenPublishBaseExtension
+import org.gradle.plugins.signing.SigningExtension
 
 plugins {
     alias(libs.plugins.kotlin.jvm) apply false
@@ -27,9 +28,17 @@ subprojects {
     extensions.configure<MavenPublishBaseExtension> {
         publishToMavenCentral()
         // Maven Central requires signatures; local publishing works without a key (see docs/publishing.md).
-        val hasSigningKey = listOf("signingInMemoryKey", "signing.keyId", "signing.gnupg.keyName")
-            .any { providers.gradleProperty(it).isPresent }
-        if (hasSigningKey) signAllPublications()
+        val gnupgKey = providers.gradleProperty("signing.gnupg.keyName")
+        val hasSigningKey = gnupgKey.isPresent ||
+            listOf("signingInMemoryKey", "signing.keyId").any { providers.gradleProperty(it).isPresent }
+        if (hasSigningKey) {
+            // A key from the GnuPG keyring is used through the gpg command; the other forms are read by Gradle itself.
+            if (gnupgKey.isPresent) {
+                apply(plugin = "signing")
+                extensions.configure<SigningExtension> { useGpgCmd() }
+            }
+            signAllPublications()
+        }
         pom {
             this.name = displayName
             description = "Structural typing for Kotlin: classes whose members match a @Structural interface can be " +

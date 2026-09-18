@@ -64,7 +64,8 @@ These steps need an account and a signing key, so they can't be scripted here.
    ```
    Without any of these, `publishAndReleaseToMavenCentral` fails with `mavenCentralUsername not found`. Artifacts are
    signed when `signingInMemoryKey`, `signing.keyId` or `signing.gnupg.keyName` is set, so local publishing keeps
-   working without a key. The
+   working without a key. With `signing.gnupg.keyName` the build signs through the `gpg` command, which is what that
+   key form requires. The
    [gradle-maven-publish-plugin docs](https://vanniktech.github.io/gradle-maven-publish-plugin/central/) describe the
    key formats in detail.
 
@@ -76,14 +77,17 @@ These steps need an account and a signing key, so they can't be scripted here.
 
 ## Publishing a version
 
-1. Set the version in `build.gradle.kts` and commit it.
-2. Check the whole build is green: `JAVA_HOME=$(/usr/libexec/java_home -v 17) ./gradlew build`.
-3. Upload and release:
+1. Check signatures are produced: `./gradlew publishToMavenLocal`, then look for `.asc` files next to the jars in
+   `~/.m2/repository/com/obabichev/structural/...`. Central rejects a deployment without them, and
+   `gpg --verify <file>.asc <file>` should say "Good signature".
+2. Set the version in `build.gradle.kts` and commit it.
+3. Check the whole build is green: `JAVA_HOME=$(/usr/libexec/java_home -v 17) ./gradlew build`.
+4. Upload and release:
    ```bash
    JAVA_HOME=$(/usr/libexec/java_home -v 17) ./gradlew publishAndReleaseToMavenCentral
    ```
    Use `publishToMavenCentral` instead to upload without releasing, and finish the release by hand in the Central
    Portal. Artifacts usually appear on Maven Central within an hour.
-4. Tag the release in git: `git tag v<version> && git push origin v<version>`.
+5. Tag the release in git: `git tag v<version> && git push origin v<version>`.
 
 **Published versions can't be changed or deleted.** Publish a new version instead.
