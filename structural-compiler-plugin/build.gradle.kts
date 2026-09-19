@@ -1,23 +1,13 @@
 plugins {
-    alias(libs.plugins.kotlin.jvm)
+    pluginDevKit("compiler-plugin")
 }
 
-kotlin {
-    jvmToolchain(17)
-    compilerOptions {
-        optIn.add("org.jetbrains.kotlin.compiler.plugin.ExperimentalCompilerApi")
+pluginDevKit {
+    // Kotlin 2.5 turned KtSourceElement.fakeElement from a top-level extension into a member, so the source sets split
+    // there; see SourceElements.kt.
+    versionHierarchy {
+        splitDev(2, 5)
     }
-}
-
-dependencies {
-    compileOnly(libs.kotlin.compiler.embeddable)
-
-    testImplementation(project(":structural-annotations"))
-    testImplementation(libs.kotlin.compiler.embeddable)
-    testImplementation(libs.kctfork.core)
-    testImplementation(kotlin("test"))
-}
-
-tasks.test {
-    useJUnitPlatform()
+    componentRegistrar = "com.obabichev.structural.compiler.StructuralComponentRegistrar"
+    commandLineProcessor = "com.obabichev.structural.compiler.StructuralCommandLineProcessor"
 }

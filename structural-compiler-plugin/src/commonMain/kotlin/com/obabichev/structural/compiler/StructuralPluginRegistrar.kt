@@ -1,16 +1,14 @@
 package com.obabichev.structural.compiler
 
 import org.jetbrains.kotlin.compiler.plugin.CompilerPluginRegistrar
+import org.jetbrains.kotlin.compiler.plugin.devkit.DevKitComponentRegistrar
 import org.jetbrains.kotlin.config.CompilerConfiguration
 import org.jetbrains.kotlin.fir.extensions.FirExtensionRegistrar
 import org.jetbrains.kotlin.fir.extensions.FirExtensionRegistrarAdapter
 
-/** Entry point loaded by the Kotlin compiler (see META-INF/services). K2 only. */
-class StructuralPluginRegistrar : CompilerPluginRegistrar() {
-    override val pluginId: String = "com.obabichev.structural"
-    override val supportsK2: Boolean = true
-
-    override fun ExtensionStorage.registerExtensions(configuration: CompilerConfiguration) {
+/** Registers the FIR extensions. The DevKit generates the per-Kotlin-version entry point that loads this. */
+class StructuralComponentRegistrar : DevKitComponentRegistrar {
+    override fun CompilerPluginRegistrar.ExtensionStorage.registerExtensions(configuration: CompilerConfiguration) {
         FirExtensionRegistrarAdapter.registerExtension(StructuralFirRegistrar())
     }
 }

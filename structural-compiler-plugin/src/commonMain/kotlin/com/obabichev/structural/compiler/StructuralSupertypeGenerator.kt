@@ -1,8 +1,6 @@
 package com.obabichev.structural.compiler
 
-import org.jetbrains.kotlin.KtFakeSourceElementKind
 import org.jetbrains.kotlin.descriptors.ClassKind
-import org.jetbrains.kotlin.fakeElement
 import org.jetbrains.kotlin.fir.FirSession
 import org.jetbrains.kotlin.fir.declarations.FirClassLikeDeclaration
 import org.jetbrains.kotlin.fir.declarations.FirRegularClass
@@ -47,7 +45,7 @@ class StructuralSupertypeGenerator(session: FirSession) : FirSupertypeGeneration
             // the class directly as well. IntelliJ (LLFirSuperTypeTargetResolver) always replaces the supertypes with the
             // computed ones, so they must also be returned.
             val present = klass.superTypeRefs.mapNotNull { (it as? FirResolvedTypeRef)?.coneType?.classId }.toSet()
-            val source = klass.source?.fakeElement(KtFakeSourceElementKind.PluginGenerated.Default)
+            val source = klass.source?.pluginGenerated()
             val missing = added.filter { it.classId !in present }
             if (missing.isNotEmpty()) {
                 klass.replaceSuperTypeRefs(klass.superTypeRefs + missing.map { buildResolvedTypeRef { coneType = it; this.source = source } })

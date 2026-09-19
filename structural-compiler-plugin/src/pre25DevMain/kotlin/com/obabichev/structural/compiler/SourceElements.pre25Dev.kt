@@ -1,0 +1,8 @@
+package com.obabichev.structural.compiler
+
+import org.jetbrains.kotlin.KtFakeSourceElementKind
+import org.jetbrains.kotlin.KtSourceElement
+import org.jetbrains.kotlin.fakeElement
+
+internal actual fun KtSourceElement.pluginGenerated(): KtSourceElement =
+    fakeElement(KtFakeSourceElementKind.PluginGenerated.Default)

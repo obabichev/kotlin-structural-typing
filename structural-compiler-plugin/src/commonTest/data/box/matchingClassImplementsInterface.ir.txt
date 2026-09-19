@@ -1,0 +1,146 @@
+FILE fqName:<root> fileName:/matchingClassImplementsInterface.kt
+  CLASS CLASS name:Rectangular modality:FINAL visibility:public superTypes:[kotlin.Any; <root>.Sized]
+    thisReceiver: VALUE_PARAMETER INSTANCE_RECEIVER kind:DispatchReceiver name:<this> type:<root>.Rectangular
+    PROPERTY name:width visibility:public modality:FINAL [val]
+      overridden:
+        public abstract width: kotlin.Int declared in <root>.Sized
+      FIELD PROPERTY_BACKING_FIELD name:width type:kotlin.Int visibility:private [final]
+        EXPRESSION_BODY
+          GET_VAR 'width: kotlin.Int declared in <root>.Rectangular.<init>' type=kotlin.Int origin=INITIALIZE_PROPERTY_FROM_PARAMETER
+      FUN DEFAULT_PROPERTY_ACCESSOR name:<get-width> visibility:public modality:FINAL returnType:kotlin.Int
+        VALUE_PARAMETER kind:DispatchReceiver name:<this> index:0 type:<root>.Rectangular
+        correspondingProperty: PROPERTY name:width visibility:public modality:FINAL [val]
+        overridden:
+          public abstract fun <get-width> (): kotlin.Int declared in <root>.Sized
+        BLOCK_BODY
+          RETURN type=kotlin.Nothing from='public final fun <get-width> (): kotlin.Int declared in <root>.Rectangular'
+            GET_FIELD 'FIELD PROPERTY_BACKING_FIELD name:width type:kotlin.Int visibility:private [final]' type=kotlin.Int origin=null
+              receiver: GET_VAR '<this>: <root>.Rectangular declared in <root>.Rectangular.<get-width>' type=<root>.Rectangular origin=null
+    PROPERTY name:height visibility:public modality:FINAL [val]
+      overridden:
+        public abstract height: kotlin.Int declared in <root>.Sized
+      FIELD PROPERTY_BACKING_FIELD name:height type:kotlin.Int visibility:private [final]
+        EXPRESSION_BODY
+          GET_VAR 'height: kotlin.Int declared in <root>.Rectangular.<init>' type=kotlin.Int origin=INITIALIZE_PROPERTY_FROM_PARAMETER
+      FUN DEFAULT_PROPERTY_ACCESSOR name:<get-height> visibility:public modality:FINAL returnType:kotlin.Int
+        VALUE_PARAMETER kind:DispatchReceiver name:<this> index:0 type:<root>.Rectangular
+        correspondingProperty: PROPERTY name:height visibility:public modality:FINAL [val]
+        overridden:
+          public abstract fun <get-height> (): kotlin.Int declared in <root>.Sized
+        BLOCK_BODY
+          RETURN type=kotlin.Nothing from='public final fun <get-height> (): kotlin.Int declared in <root>.Rectangular'
+            GET_FIELD 'FIELD PROPERTY_BACKING_FIELD name:height type:kotlin.Int visibility:private [final]' type=kotlin.Int origin=null
+              receiver: GET_VAR '<this>: <root>.Rectangular declared in <root>.Rectangular.<get-height>' type=<root>.Rectangular origin=null
+    PROPERTY name:color visibility:public modality:FINAL [val]
+      FIELD PROPERTY_BACKING_FIELD name:color type:kotlin.String visibility:private [final]
+        EXPRESSION_BODY
+          GET_VAR 'color: kotlin.String declared in <root>.Rectangular.<init>' type=kotlin.String origin=INITIALIZE_PROPERTY_FROM_PARAMETER
+      FUN DEFAULT_PROPERTY_ACCESSOR name:<get-color> visibility:public modality:FINAL returnType:kotlin.String
+        VALUE_PARAMETER kind:DispatchReceiver name:<this> index:0 type:<root>.Rectangular
+        correspondingProperty: PROPERTY name:color visibility:public modality:FINAL [val]
+        BLOCK_BODY
+          RETURN type=kotlin.Nothing from='public final fun <get-color> (): kotlin.String declared in <root>.Rectangular'
+            GET_FIELD 'FIELD PROPERTY_BACKING_FIELD name:color type:kotlin.String visibility:private [final]' type=kotlin.String origin=null
+              receiver: GET_VAR '<this>: <root>.Rectangular declared in <root>.Rectangular.<get-color>' type=<root>.Rectangular origin=null
+    CONSTRUCTOR visibility:public returnType:<root>.Rectangular [primary]
+      VALUE_PARAMETER kind:Regular name:width index:0 type:kotlin.Int
+      VALUE_PARAMETER kind:Regular name:height index:1 type:kotlin.Int
+      VALUE_PARAMETER kind:Regular name:color index:2 type:kotlin.String
+      BLOCK_BODY
+        DELEGATING_CONSTRUCTOR_CALL 'public constructor <init> () declared in kotlin.Any'
+        INSTANCE_INITIALIZER_CALL classDescriptor='CLASS CLASS name:Rectangular modality:FINAL visibility:public superTypes:[kotlin.Any; <root>.Sized]' type=kotlin.Unit
+    FUN FAKE_OVERRIDE name:equals visibility:public modality:OPEN returnType:kotlin.Boolean [fake_override,operator]
+      VALUE_PARAMETER kind:DispatchReceiver name:<this> index:0 type:kotlin.Any
+      VALUE_PARAMETER kind:Regular name:other index:1 type:kotlin.Any?
+      overridden:
+        public open fun equals (other: kotlin.Any?): kotlin.Boolean declared in kotlin.Any
+        public open fun equals (other: kotlin.Any?): kotlin.Boolean declared in <root>.Sized
+    FUN FAKE_OVERRIDE name:hashCode visibility:public modality:OPEN returnType:kotlin.Int [fake_override]
+      VALUE_PARAMETER kind:DispatchReceiver name:<this> index:0 type:kotlin.Any
+      overridden:
+        public open fun hashCode (): kotlin.Int declared in kotlin.Any
+        public open fun hashCode (): kotlin.Int declared in <root>.Sized
+    FUN FAKE_OVERRIDE name:toString visibility:public modality:OPEN returnType:kotlin.String [fake_override]
+      VALUE_PARAMETER kind:DispatchReceiver name:<this> index:0 type:kotlin.Any
+      overridden:
+        public open fun toString (): kotlin.String declared in kotlin.Any
+        public open fun toString (): kotlin.String declared in <root>.Sized
+    FUN name:area visibility:public modality:FINAL returnType:kotlin.Int
+      VALUE_PARAMETER kind:DispatchReceiver name:<this> index:0 type:<root>.Rectangular
+      overridden:
+        public abstract fun area (): kotlin.Int declared in <root>.Sized
+      BLOCK_BODY
+        RETURN type=kotlin.Nothing from='public final fun area (): kotlin.Int declared in <root>.Rectangular'
+          CALL 'public final fun times (other: kotlin.Int): kotlin.Int declared in kotlin.Int' type=kotlin.Int origin=MUL
+            ARG <this>: CALL 'public final fun <get-width> (): kotlin.Int declared in <root>.Rectangular' type=kotlin.Int origin=GET_PROPERTY
+              ARG <this>: GET_VAR '<this>: <root>.Rectangular declared in <root>.Rectangular.area' type=<root>.Rectangular origin=IMPLICIT_ARGUMENT
+            ARG other: CALL 'public final fun <get-height> (): kotlin.Int declared in <root>.Rectangular' type=kotlin.Int origin=GET_PROPERTY
+              ARG <this>: GET_VAR '<this>: <root>.Rectangular declared in <root>.Rectangular.area' type=<root>.Rectangular origin=IMPLICIT_ARGUMENT
+  CLASS INTERFACE name:Sized modality:ABSTRACT visibility:public superTypes:[kotlin.Any]
+    annotations:
+      Structural
+    thisReceiver: VALUE_PARAMETER INSTANCE_RECEIVER kind:DispatchReceiver name:<this> type:<root>.Sized
+    FUN FAKE_OVERRIDE name:equals visibility:public modality:OPEN returnType:kotlin.Boolean [fake_override,operator]
+      VALUE_PARAMETER kind:DispatchReceiver name:<this> index:0 type:kotlin.Any
+      VALUE_PARAMETER kind:Regular name:other index:1 type:kotlin.Any?
+      overridden:
+        public open fun equals (other: kotlin.Any?): kotlin.Boolean declared in kotlin.Any
+    FUN FAKE_OVERRIDE name:hashCode visibility:public modality:OPEN returnType:kotlin.Int [fake_override]
+      VALUE_PARAMETER kind:DispatchReceiver name:<this> index:0 type:kotlin.Any
+      overridden:
+        public open fun hashCode (): kotlin.Int declared in kotlin.Any
+    FUN FAKE_OVERRIDE name:toString visibility:public modality:OPEN returnType:kotlin.String [fake_override]
+      VALUE_PARAMETER kind:DispatchReceiver name:<this> index:0 type:kotlin.Any
+      overridden:
+        public open fun toString (): kotlin.String declared in kotlin.Any
+    FUN name:area visibility:public modality:ABSTRACT returnType:kotlin.Int
+      VALUE_PARAMETER kind:DispatchReceiver name:<this> index:0 type:<root>.Sized
+    PROPERTY name:height visibility:public modality:ABSTRACT [val]
+      FUN DEFAULT_PROPERTY_ACCESSOR name:<get-height> visibility:public modality:ABSTRACT returnType:kotlin.Int
+        VALUE_PARAMETER kind:DispatchReceiver name:<this> index:0 type:<root>.Sized
+        correspondingProperty: PROPERTY name:height visibility:public modality:ABSTRACT [val]
+    PROPERTY name:width visibility:public modality:ABSTRACT [val]
+      FUN DEFAULT_PROPERTY_ACCESSOR name:<get-width> visibility:public modality:ABSTRACT returnType:kotlin.Int
+        VALUE_PARAMETER kind:DispatchReceiver name:<this> index:0 type:<root>.Sized
+        correspondingProperty: PROPERTY name:width visibility:public modality:ABSTRACT [val]
+  FUN name:box visibility:public modality:FINAL returnType:kotlin.String
+    BLOCK_BODY
+      VAR name:rectangular type:<root>.Rectangular [val]
+        CONSTRUCTOR_CALL 'public constructor <init> (width: kotlin.Int, height: kotlin.Int, color: kotlin.String) declared in <root>.Rectangular' type=<root>.Rectangular origin=null
+          ARG width: CONST Int type=kotlin.Int value=2
+          ARG height: CONST Int type=kotlin.Int value=3
+          ARG color: CONST String type=kotlin.String value="red"
+      WHEN type=kotlin.Unit origin=IF
+        BRANCH
+          if: CALL 'public final fun not (): kotlin.Boolean declared in kotlin.Boolean' type=kotlin.Boolean origin=EXCLEQ
+            ARG <this>: CALL 'public final fun EQEQ (arg0: kotlin.Any?, arg1: kotlin.Any?): kotlin.Boolean declared in kotlin.internal.ir' type=kotlin.Boolean origin=EXCLEQ
+              ARG arg0: CALL 'public final fun size (target: <root>.Sized): kotlin.Int declared in <root>' type=kotlin.Int origin=null
+                ARG target: GET_VAR 'val rectangular: <root>.Rectangular declared in <root>.box' type=<root>.Rectangular origin=null
+              ARG arg1: CONST Int type=kotlin.Int value=6
+          then: RETURN type=kotlin.Nothing from='public final fun box (): kotlin.String declared in <root>'
+            CONST String type=kotlin.String value="Fail: size"
+      WHEN type=kotlin.Unit origin=IF
+        BRANCH
+          if: TYPE_OP type=kotlin.Boolean origin=NOT_INSTANCEOF typeOperand=<root>.Sized
+            TYPE_OP type=kotlin.Any origin=CAST typeOperand=kotlin.Any
+              GET_VAR 'val rectangular: <root>.Rectangular declared in <root>.box' type=<root>.Rectangular origin=null
+          then: RETURN type=kotlin.Nothing from='public final fun box (): kotlin.String declared in <root>'
+            CONST String type=kotlin.String value="Fail: is check"
+      VAR name:sized type:<root>.Sized [val]
+        GET_VAR 'val rectangular: <root>.Rectangular declared in <root>.box' type=<root>.Rectangular origin=null
+      WHEN type=kotlin.Unit origin=IF
+        BRANCH
+          if: CALL 'public final fun not (): kotlin.Boolean declared in kotlin.Boolean' type=kotlin.Boolean origin=EXCLEQEQ
+            ARG <this>: CALL 'public final fun EQEQEQ (arg0: kotlin.Any?, arg1: kotlin.Any?): kotlin.Boolean declared in kotlin.internal.ir' type=kotlin.Boolean origin=EXCLEQEQ
+              ARG arg0: GET_VAR 'val sized: <root>.Sized declared in <root>.box' type=<root>.Sized origin=null
+              ARG arg1: GET_VAR 'val rectangular: <root>.Rectangular declared in <root>.box' type=<root>.Rectangular origin=null
+          then: RETURN type=kotlin.Nothing from='public final fun box (): kotlin.String declared in <root>'
+            CONST String type=kotlin.String value="Fail: identity"
+      RETURN type=kotlin.Nothing from='public final fun box (): kotlin.String declared in <root>'
+        CONST String type=kotlin.String value="OK"
+  FUN name:size visibility:public modality:FINAL returnType:kotlin.Int
+    VALUE_PARAMETER kind:Regular name:target index:0 type:<root>.Sized
+    BLOCK_BODY
+      RETURN type=kotlin.Nothing from='public final fun size (target: <root>.Sized): kotlin.Int declared in <root>'
+        CALL 'public abstract fun area (): kotlin.Int declared in <root>.Sized' type=kotlin.Int origin=null
+          ARG <this>: GET_VAR 'target: <root>.Sized declared in <root>.size' type=<root>.Sized origin=null
