@@ -16,6 +16,9 @@ val generateCoordinates = tasks.register("generateCoordinates") {
     val directory = layout.buildDirectory.dir("generated/coordinates")
     val artifactGroup = project.group.toString()
     val artifactVersion = project.version.toString()
+    // Without these, changing the version leaves the generated coordinates stale.
+    inputs.property("artifactGroup", artifactGroup)
+    inputs.property("artifactVersion", artifactVersion)
     outputs.dir(directory)
     doLast {
         val file = directory.get().file("com/obabichev/structural/gradle/Coordinates.kt").asFile
