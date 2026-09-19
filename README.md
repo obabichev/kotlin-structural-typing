@@ -106,6 +106,7 @@ signature. [`proposal.md`](proposal.md) has the exact rules.
 | [`docs/known-issues.md`](docs/known-issues.md) | Current limitations, with what has been verified |
 | [`docs/roadmap.md`](docs/roadmap.md) | Planned work, starting with generics |
 | [`docs/publishing.md`](docs/publishing.md) | How the artifacts are published |
+| [`docs/devkit-spike.md`](docs/devkit-spike.md) | Experiment with the Kotlin compiler plugin DevKit, for multi-version support |
 
 ## Working on this repository
 

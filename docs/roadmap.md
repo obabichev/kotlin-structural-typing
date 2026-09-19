@@ -64,3 +64,7 @@ Every matching class in the module implements the interface. Consider:
 - **Automated IDE test:** run the plugin through IntelliJ's compiler (the Analysis API) in tests. The command-line
   compiler and IntelliJ apply supertypes differently, which already caused an enum bug only visible in the IDE.
 - **CI:** build against new Kotlin versions early; the plugin uses internal compiler APIs.
+- **Kotlin compiler plugin DevKit:** the `devkit-migration` branch builds the plugin against several compiler versions,
+  including the ones IntelliJ analyzes with, and adds the compiler test framework with IDE-mode tests. It would replace
+  the single-Kotlin-version limitation and the manual IDE testing. See [`devkit-spike.md`](devkit-spike.md) for what
+  works and what is left.
