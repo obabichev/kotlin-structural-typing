@@ -65,26 +65,25 @@ change to the class declaration. Binary-compatibility checks will see it.
 
 ### 8. The IDE needs the Structural Typing IntelliJ plugin
 
-IntelliJ's K2 mode only runs compiler plugins bundled with the IDE (registry key
-`kotlin.k2.only.bundled.compiler.plugins.enabled`, default `true`). Without help, calls like `size(Rectangular(...))`
-show `Argument type mismatch: actual type is 'Rectangular', but 'Sized' was expected.` while the Gradle build succeeds
-(verified in IntelliJ IDEA 2026.2.0.1).
+IntelliJ's K2 mode only runs compiler plugins bundled with the IDE, so without help the editor shows
+`Argument type mismatch: actual type is 'Rectangular', but 'Sized' was expected.` while the Gradle build succeeds
+(verified in IntelliJ IDEA 2026.2.0.1). Two ways around it:
 
-The `structural-intellij-plugin` module fixes this without changing IDE settings. The Kotlin IDE plugin asks every
-`org.jetbrains.kotlin.bundledFirCompilerPluginProvider` for a replacement of each compiler plugin jar from the build,
-and uses a returned jar even when only bundled plugins are allowed (verified by reading
-`KtCompilerPluginsCache.substitutePluginJar` in IntelliJ 2026.2). Our provider returns a copy of the compiler plugin
-compiled against the IDE's own Kotlin compiler (`2.4.20-dev-6724` in 2026.2.0.1).
+- **Install the plugin from this repository** (`structural-intellij-plugin`), which answers the Kotlin IDE plugin's
+  `org.jetbrains.kotlin.bundledFirCompilerPluginProvider` with a copy of the compiler plugin compiled against the IDE's
+  own Kotlin compiler. No IDE settings to change, but it supports IntelliJ 2026.2 (`262.*`) only, because it bundles a
+  copy built for that IDE's compiler.
+- **Turn off the registry key** `kotlin.k2.only.bundled.compiler.plugins.enabled` (*Help → Find Action → Registry…*).
+  This works for any IDE version, and is the fallback when ours doesn't cover yours. The Kotlin team confirmed this is
+  the supported route today, and that automatic loading of such plugins is being worked on upstream.
 
 Remaining limits:
 
-- Users still install the IntelliJ plugin once. `.idea/externalDependencies.xml` makes IntelliJ suggest it, but until
-  it is published on JetBrains Marketplace it has to be installed from disk
-  (`structural-intellij-plugin/build/distributions/structural-intellij-plugin.zip`).
-- It supports IntelliJ 2026.2 (`262.*`) only. Every IDE version bundles a different Kotlin compiler, so each supported
-  version needs its own build of the compiler plugin copy.
-- Loading in a running IDE was checked manually in IntelliJ IDEA 2026.2.0.1 (errors disappear with the plugin installed and
-  default registry settings); there is no automated IDE test yet.
+- Users install the IntelliJ plugin once, from the
+  [GitHub release](https://github.com/obabichev/kotlin-structural-typing/releases); it is not on the JetBrains
+  Marketplace.
+- Loading in a running IDE is checked by hand; there is no automated IDE test yet (the DevKit would provide one, see
+  the roadmap).
 - The project must be trusted in IntelliJ; untrusted projects don't run any compiler plugins.
 
 ## Plugin implementation

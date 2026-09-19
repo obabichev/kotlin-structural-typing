@@ -72,7 +72,9 @@ explicitly, and the interface and its matching classes must be compiled in the s
 **3. For IntelliJ,** install the IDE plugin, otherwise the editor reports `Argument type mismatch` errors that the build
 doesn't have: download the zip from the
 [latest release](https://github.com/obabichev/kotlin-structural-typing/releases/latest), install it through
-*Settings → Plugins → ⚙ → Install Plugin from Disk…* and reload the Gradle project. IntelliJ 2026.2 (`262.*`) only.
+*Settings → Plugins → ⚙ → Install Plugin from Disk…* and reload the Gradle project. IntelliJ 2026.2 (`262.*`) only; on
+other versions, turn off the registry key `kotlin.k2.only.bundled.compiler.plugins.enabled` instead
+(*Help → Find Action → Registry…*).
 
 ## How it works
 

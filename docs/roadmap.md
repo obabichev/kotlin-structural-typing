@@ -59,8 +59,12 @@ Every matching class in the module implements the interface. Consider:
   Kotlin version.
 - **JetBrains Marketplace:** publish the IntelliJ plugin so the prompt from `.idea/externalDependencies.xml` installs it
   directly.
-- **More IDE versions:** build the compiler plugin copy against each supported IntelliJ version's Kotlin compiler; check
-  Android Studio.
+- **More IDE versions:** today the IDE plugin bundles a copy of the compiler plugin built for one IDE's compiler, which
+  is why it supports 2026.2 only. With the DevKit publishing a variant per compiler version, it could hand the IDE the
+  matching published variant instead, covering many IDE versions with one build. Check Android Studio too.
+- **Dropping the IDE plugin:** the Kotlin team is working on having the IDE load supported third-party compiler plugins
+  automatically. Once that ships, `structural-intellij-plugin` can go, and the registry key
+  `kotlin.k2.only.bundled.compiler.plugins.enabled` stops being the fallback.
 - **Automated IDE test:** run the plugin through IntelliJ's compiler (the Analysis API) in tests. The command-line
   compiler and IntelliJ apply supertypes differently, which already caused an enum bug only visible in the IDE.
 - **CI:** build against new Kotlin versions early; the plugin uses internal compiler APIs.
