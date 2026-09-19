@@ -21,12 +21,12 @@ pluginManagement {
 // build.gradle.kts
 plugins {
     kotlin("jvm") version "2.4.20"
-    id("com.obabichev.structural") version "0.2.0-kotlin-2.4.20"
+    id("com.obabichev.structural") version "0.2.0-kotlin-2.4"
 }
 ```
 
-Kotlin **2.4.20** is required: the compiler plugin uses internal compiler APIs, which is why the version names the
-Kotlin version it works with.
+Kotlin **2.4.x** is required (tested with 2.4.0, 2.4.10 and 2.4.20): the compiler plugin uses internal compiler APIs,
+which is why the version names the Kotlin line it works with. On other versions the build fails with a clear message.
 
 **2. Mark an interface and use any matching class:**
 

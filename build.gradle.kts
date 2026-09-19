@@ -12,7 +12,7 @@ plugins {
 // that and is tagged release/<version> (see docs/publishing.md).
 allprojects {
     group = "com.obabichev.structural"
-    version = "0.2.0-kotlin-2.4.20"
+    version = "0.2.0-kotlin-2.4"
 }
 
 // Artifacts published to Maven Central: the annotation, the compiler plugin and the Gradle plugin.
