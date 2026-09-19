@@ -8,10 +8,11 @@ plugins {
 }
 
 // Published artifacts share these coordinates. The version names the Kotlin version, because the compiler plugin uses
-// internal compiler APIs and only works with that one.
+// internal compiler APIs and only works with that one. Between releases it carries -SNAPSHOT; the release commit strips
+// that and is tagged release/<version> (see docs/publishing.md).
 allprojects {
     group = "com.obabichev.structural"
-    version = "0.2.0-kotlin-2.4.20"
+    version = "0.2.0-kotlin-2.4.20-SNAPSHOT"
 }
 
 // Artifacts published to Maven Central: the annotation, the compiler plugin and the Gradle plugin.

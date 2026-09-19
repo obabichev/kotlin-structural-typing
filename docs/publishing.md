@@ -79,21 +79,36 @@ These steps need an account and a signing key, so they can't be scripted here.
 
 ## Publishing a version
 
-1. Check signatures are produced: `./gradlew publishToMavenLocal`, then look for `.asc` files next to the jars in
-   `~/.m2/repository/com/obabichev/structural/...`. Central rejects a deployment without them, and
-   `gpg --verify <file>.asc <file>` should say "Good signature".
-2. Set the version in `build.gradle.kts` and commit it.
-3. Check the whole build is green: `JAVA_HOME=$(/usr/libexec/java_home -v 17) ./gradlew build`.
-4. Upload and release:
+Between releases the version in `build.gradle.kts` ends with `-SNAPSHOT`. Releasing is its own commit, which contains
+nothing but the version change, and carries the tag.
+
+1. Check the build is green and signatures are produced:
    ```bash
-   JAVA_HOME=$(/usr/libexec/java_home -v 17) ./gradlew publishAndReleaseToMavenCentral
+   JAVA_HOME=$(/usr/libexec/java_home -v 17) ./gradlew build publishToMavenLocal
+   ls ~/.m2/repository/com/obabichev/structural/structural-annotations/<version>/
    ```
-   Use `publishToMavenCentral` instead to upload without releasing, and finish the release by hand in the Central
-   Portal. Artifacts usually appear on Maven Central within an hour.
-5. Tag the release in git and publish a GitHub release with the IntelliJ plugin zip attached:
+   Every jar and pom needs an `.asc` next to it, and `gpg --verify <file>.asc <file>` should say "Good signature";
+   Central rejects a deployment without them.
+2. **The release commit:** drop `-SNAPSHOT` from the version in `build.gradle.kts`, update the version in `README.md`
+   and this file if it is mentioned there, and commit it on its own:
    ```bash
-   git tag v<version> && git push origin v<version>
-   gh release create v<version> structural-intellij-plugin/build/distributions/*.zip
+   git commit -am "Release <version>"
+   git tag -a "release/<version>" -m "Release <version>"
+   git push origin main "release/<version>"
    ```
+3. Upload, then release it in the [portal](https://central.sonatype.com) after looking at the staged files:
+   ```bash
+   JAVA_HOME=$(/usr/libexec/java_home -v 17) ./gradlew publishToMavenCentral
+   ```
+   `publishAndReleaseToMavenCentral` skips the manual step. Artifacts appear on Maven Central within about an hour.
+4. Attach the IntelliJ plugin to a GitHub release, since it isn't published anywhere else:
+   ```bash
+   JAVA_HOME=$(/usr/libexec/java_home -v 17) ./gradlew :structural-intellij-plugin:buildPlugin \
+       "-Pstructural.ideaPath=/Applications/IntelliJ IDEA.app"
+   gh release create "release/<version>" structural-intellij-plugin/build/distributions/*.zip
+   ```
+5. **Back to development:** set the next version with `-SNAPSHOT` in `build.gradle.kts` and commit that on its own.
+
+The first release used the tag `v0.1.0-kotlin-2.4.20`; later ones use `release/<version>`.
 
 **Published versions can't be changed or deleted.** Publish a new version instead.
