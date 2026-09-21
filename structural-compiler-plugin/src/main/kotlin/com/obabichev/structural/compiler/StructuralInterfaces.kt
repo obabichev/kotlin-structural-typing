@@ -44,6 +44,9 @@ internal class Member(val declaration: FirCallableDeclaration, val owner: FirReg
         is FirNamedFunction -> declaration.name
         else -> null
     }
+
+    /** How the member reads in a message: `width` for a property, `area()` for a function. */
+    val label: String get() = if (declaration is FirNamedFunction) "$name()" else name?.asString().orEmpty()
 }
 
 /** A @Structural interface that classes can implement by shape, and the abstract members they must provide. */
@@ -151,49 +154,102 @@ internal fun FirSession.implementsByShape(members: List<Member>, iface: Structur
     iface.requirements.all { requirement -> members.any { satisfies(it, requirement, types) } }
 
 /**
- * Whether [member] of a class can implement [requirement] under Kotlin override rules, without the class declaring the
- * interface: same name, public, not generic or an extension, and
+ * Why [members] of a class don't provide everything [iface] requires, one reason per unmet requirement; empty when the
+ * class implements it. Only for diagnostics: [implementsByShape] answers the same question without building messages.
+ */
+internal fun FirSession.explain(members: List<Member>, iface: StructuralInterface, types: TypeLookup): List<Mismatch> =
+    iface.requirements.mapNotNull { requirement ->
+        val named = members.filter { it.name != null && it.name == requirement.name }
+        if (named.isEmpty()) return@mapNotNull Mismatch.NoSuchMember(requirement.label)
+        val reasons = named.map { mismatch(it, requirement, types) }
+        // A single matching member is enough; otherwise report the one that came closest.
+        if (reasons.any { it == null }) null else reasons.filterNotNull().minByOrNull { it.rank }
+    }
+
+/** Whether [member] of a class can implement [requirement]; see [mismatch] for the rules. */
+internal fun FirSession.satisfies(member: Member, requirement: Member, types: TypeLookup): Boolean =
+    mismatch(member, requirement, types) == null
+
+/**
+ * Why [member] of a class can't implement [requirement] under Kotlin override rules, without the class declaring the
+ * interface, or null when it can: same name, public, not generic or an extension, and
  * - property: `val` may have a subtype, `var` must be a `var` of exactly the same type with a public setter; not `const`
  * - function: same `suspend`, same parameter names, `vararg` and exact types, no default values (an override can't
  *   declare them), not `inline`, and a return type that is the same or a subtype
+ *
+ * Nothing is allocated while a member matches, so the supertype phase pays only for failures.
  */
-internal fun FirSession.satisfies(member: Member, requirement: Member, types: TypeLookup): Boolean {
+internal fun FirSession.mismatch(member: Member, requirement: Member, types: TypeLookup): Mismatch? {
     val candidate = member.declaration
     val required = requirement.declaration
-    if (member.name == null || member.name != requirement.name) return false
-    if (candidate.receiverParameter != null || candidate.typeParameters.isNotEmpty()) return false
-    if (!candidate.status.visibility.isPublicOrDefault()) return false
+    val label = requirement.label
+    if (member.name == null || member.name != requirement.name) return Mismatch.NoSuchMember(label)
+    if (candidate.receiverParameter != null) return Mismatch.Unsupported(label, "is an extension")
+    if (candidate.typeParameters.isNotEmpty()) return Mismatch.Unsupported(label, "is generic")
+    if (!candidate.status.visibility.isPublicOrDefault()) {
+        return Mismatch.NotPublic(label, candidate.status.visibility)
+    }
 
-    // Types involving type parameters (of a generic superclass) would need substitution: treat them as unknown.
-    fun concrete(type: ConeKotlinType?) = type?.takeUnless { it.contains { part -> part is ConeTypeParameterType } }
-    val expectedReturn = concrete(types.returnType(required, requirement.owner)) ?: return false
-    val actualReturn = concrete(types.returnType(candidate, member.owner)) ?: return false
+    val expectedReturn = concrete(types.returnType(required, requirement.owner))
+        ?: return Mismatch.Unsupported(label, "its type in the interface can't be compared")
+    val actualReturn = types.returnType(candidate, member.owner)?.let(::concrete)
+        ?: return Mismatch.InferredType(label)
 
     return when {
-        required is FirProperty && candidate is FirProperty -> {
-            if (candidate.status.isConst) return false
-            if (!required.isVar) return types.isSubtype(actualReturn, expectedReturn)
-            candidate.isVar &&
-                candidate.setter?.status?.visibility?.isPublicOrDefault() != false &&
-                types.isEqual(actualReturn, expectedReturn)
+        required is FirProperty && candidate is FirProperty -> when {
+            candidate.status.isConst -> Mismatch.Unsupported(label, "is const")
+            !required.isVar ->
+                if (types.isSubtype(actualReturn, expectedReturn)) null
+                else Mismatch.PropertyType(label, expectedReturn, actualReturn)
+            !candidate.isVar -> Mismatch.NeedsVar(label)
+            candidate.setter?.status?.visibility?.isPublicOrDefault() == false -> Mismatch.SetterNotPublic(label)
+            !types.isEqual(actualReturn, expectedReturn) -> Mismatch.PropertyType(label, expectedReturn, actualReturn)
+            else -> null
         }
-        required is FirNamedFunction && candidate is FirNamedFunction -> {
-            if (candidate.status.isSuspend != required.status.isSuspend || candidate.status.isInline) return false
-            if (candidate.valueParameters.size != required.valueParameters.size) return false
-            val parametersMatch = candidate.valueParameters.zip(required.valueParameters).all { (actual, expected) ->
-                val actualType = concrete(types.parameterType(actual, member.owner))
-                val expectedType = concrete(types.parameterType(expected, requirement.owner))
-                actual.name == expected.name &&
-                    actual.isVararg == expected.isVararg &&
-                    actual.defaultValue == null &&
-                    actualType != null && expectedType != null &&
-                    types.isEqual(actualType, expectedType)
-            }
-            parametersMatch && types.isSubtype(actualReturn, expectedReturn)
-        }
-        else -> false
+        required is FirNamedFunction && candidate is FirNamedFunction ->
+            functionMismatch(label, member, requirement, expectedReturn, actualReturn, types)
+        required is FirProperty -> Mismatch.Unsupported(label, "is a function, the interface declares a property")
+        else -> Mismatch.Unsupported(label, "is a property, the interface declares a function")
     }
 }
+
+/** The parameter-by-parameter half of [mismatch], reached once both sides are known to be functions. */
+private fun functionMismatch(
+    label: String,
+    member: Member,
+    requirement: Member,
+    expectedReturn: ConeKotlinType,
+    actualReturn: ConeKotlinType,
+    types: TypeLookup,
+): Mismatch? {
+    val candidate = member.declaration as FirNamedFunction
+    val required = requirement.declaration as FirNamedFunction
+    if (candidate.status.isSuspend != required.status.isSuspend) {
+        return Mismatch.Suspend(label, required.status.isSuspend)
+    }
+    if (candidate.status.isInline) return Mismatch.Unsupported(label, "is inline")
+    if (candidate.valueParameters.size != required.valueParameters.size) {
+        return Mismatch.ParameterCount(label, required.valueParameters.size, candidate.valueParameters.size)
+    }
+    candidate.valueParameters.zip(required.valueParameters).forEachIndexed { at, (actual, expected) ->
+        if (actual.name != expected.name) return Mismatch.ParameterName(label, at, expected.name, actual.name)
+        if (actual.isVararg != expected.isVararg) return Mismatch.ParameterVararg(label, at, expected.isVararg)
+        if (actual.defaultValue != null) return Mismatch.ParameterDefault(label, at)
+        val expectedType = concrete(types.parameterType(expected, requirement.owner))
+            ?: return Mismatch.Unsupported(label, "a parameter type in the interface can't be compared")
+        val actualType = types.parameterType(actual, member.owner)?.let(::concrete)
+            ?: return Mismatch.InferredType(label)
+        if (!types.isEqual(actualType, expectedType)) {
+            return Mismatch.ParameterType(label, at, expectedType, actualType)
+        }
+    }
+    return if (types.isSubtype(actualReturn, expectedReturn)) null
+    else Mismatch.ReturnType(label, expectedReturn, actualReturn)
+}
+
+/** Types involving type parameters (of a generic superclass) would need substitution: treat them as unknown. */
+private fun concrete(type: ConeKotlinType?): ConeKotlinType? =
+    type?.takeUnless { it.contains { part -> part is ConeTypeParameterType } }
 
 /** Before status resolution an unspecified visibility is [Visibilities.Unknown], which means public here. */
 private fun Visibility.isPublicOrDefault(): Boolean = this == Visibilities.Public || this == Visibilities.Unknown
