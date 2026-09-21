@@ -33,8 +33,8 @@ written `class Rectangular(...) : Sized`. It hooks into three phases of the comp
    of the module. If the class's properties and functions match, the interface is added as a supertype.
 2. **Status** (`FirStatusTransformerExtension`): properties and functions that implement an added interface are marked
    `override`, matched by full signature.
-3. **Checkers** (`FirAdditionalCheckersExtension`): a warning for classes that would match except that some member
-   types are inferred (see "Inferred member types").
+3. **Checkers** (`FirAdditionalCheckersExtension`): explains classes that nearly match, at the class and at the call
+   sites that reject them (see "Near misses").
 
 After that the compiler does everything else itself: override checks, bridge methods (e.g. for `Int` implementing
 `Number`), bytecode (`class Rectangular implements Sized`), incremental compilation.
@@ -86,7 +86,8 @@ Plugin files:
    resolution").
 4. **StructuralSupertypeGenerator**: adds matched interfaces as supertypes.
 5. **StructuralOverrideMarker**: marks implementing properties and functions `override`.
-6. **StructuralCheckers** / **StructuralDiagnostics**: the inferred-member-types warning.
+6. **StructuralCheckers** / **StructuralDiagnostics** / **StructuralMismatch**: the near-miss diagnostics and the
+   reasons they report.
 
 ## Rules
 
@@ -151,17 +152,47 @@ Supertypes are decided in the compiler's supertype phase, so the plugin has to r
 
 After that phase (override marking, the warning), the compiler's resolved types and type checker are used.
 
-### Inferred member types
+### Near misses
 
-If a class would match with its resolved types but some matching members have inferred types, it doesn't implement the
-interface and the plugin reports a warning:
+Matching is all-or-nothing, so a class that misses by one detail is simply not the interface, and the code that uses it
+fails with the compiler's own message, which names the two types and nothing else:
+
+```
+e: Argument type mismatch: actual type is 'Panel', but 'Sized' was expected.
+```
+
+The matcher knows why each member failed, so the plugin reports it. `mismatch` returns a `Mismatch` (a wrong type, a
+non-public member, a parameter name, a `val` where the interface declares a `var`, …) instead of a boolean, and
+`satisfies` is a wrapper over it, so nothing is allocated while a member matches.
+
+**At a rejected argument** every unmet requirement is listed:
+
+```
+e: 'Panel' does not implement @Structural interface 'com.example.Sized':
+       height: is internal, must be public
+```
+
+This is an error rather than a warning because the compiler prints no warnings at all once a compilation has an error,
+which is exactly this situation. It is reported only where resolution already failed, so it can't fail a build that
+would otherwise succeed. No threshold applies: the interface was named at that position, so the comparison is the one
+the code asked for.
+
+**On a class declaration** a warning is reported when the class is close enough to be worth it: every required name is
+present and at least one requirement is met. Without that threshold every class in the module would be reported against
+every interface. An interface with a single requirement is therefore never reported here, only at call sites.
+
+```
+w: 'Panel' almost implements @Structural interface 'com.example.Sized':
+       height: is 'Long', expected 'Int'
+```
+
+**Inferred member types** are the case where the class matches with resolved types although it didn't gain the
+interface, because supertypes are decided before inferred types are known:
 
 ```
 w: 'Square' matches @Structural interface 'com.example.Sized' but doesn't implement it, because these members have
    inferred types: width. Declare their types explicitly.
 ```
-
-No warning is reported if the class wouldn't match even with its resolved types.
 
 ## Testing
 
@@ -175,7 +206,8 @@ No warning is reported if the class wouldn't match even with its resolved types.
   - `EnumClassesTest`: enum classes
   - `TypeResolutionTest`: types resolved in the right file, file order, compiler state, nested types
   - `UnsupportedInterfacesTest`: interfaces that are never added
-  - `InferredMemberTypesTest`: the warning
+  - `InferredMemberTypesTest`: the inferred-types warning
+  - `NearMissTest`: what a class that nearly matches is told, at the call site and on the class
 - **`sample`**: a real Gradle build using the plugin through `kotlinCompilerPluginClasspath`, with one test file per
   user-facing feature (`BasicUsageTest`, `CallSitesTest`, `PropertiesTest`, `InheritanceTest`, `EnumClassesTest`,
   `FunctionsAndSuperinterfacesTest`).

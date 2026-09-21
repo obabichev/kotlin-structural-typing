@@ -83,7 +83,12 @@ The plugin makes a matching class **really implement** the interface, as if you 
 
 1. adds the interface as a supertype of every class in the module that matches it,
 2. marks the matching properties and functions `override`,
-3. warns about classes that would match except that some member types are inferred.
+3. explains classes that nearly match, so a near miss isn't silent:
+
+```
+e: 'Panel' does not implement @Structural interface 'com.example.Sized':
+       height: is internal, must be public
+```
 
 The compiler does the rest: override checks, bridge methods, bytecode, incremental compilation. Because the class really
 implements the interface, identity is preserved (`===`), `is` checks work, and `List<Rectangular>` is a `List<Sized>`.
@@ -144,7 +149,7 @@ Without `-Pstructural.ideaPath`, Gradle downloads IntelliJ IDEA 2026.2 to build 
 
 ## Status
 
-A proof of concept: 64 tests cover the supported cases, and the whole build passes without compiler warnings. It is
+A proof of concept: 72 tests cover the supported cases, and the whole build passes without compiler warnings. It is
 published for trying out, not for production use. The main limitations:
 
 - generic interfaces and generic members are ignored ([roadmap](docs/roadmap.md))

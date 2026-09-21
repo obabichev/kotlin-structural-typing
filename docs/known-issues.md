@@ -20,6 +20,11 @@ Supertypes are decided early in compilation, before inferred types are resolved,
 requirement. The plugin reports a warning naming the members to fix, but the class doesn't implement the interface until
 their types are declared.
 
+That warning, like every Kotlin warning, disappears as soon as anything in the compilation has an error (verified with
+Kotlin 2.4.20, plugin or no plugin: an error in one file hides warnings in every other). This is why the near-miss
+explanation at a rejected argument is reported as an error instead — a warning there would never be seen, since it
+always accompanies the compiler's own `Argument type mismatch`.
+
 ### 2. Interfaces must be declared in the module being compiled (verified)
 
 A `@Structural` interface from a dependency is not found, so classes in the current module don't implement it. The
