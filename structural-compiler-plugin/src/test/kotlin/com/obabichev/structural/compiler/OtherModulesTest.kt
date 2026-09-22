@@ -8,14 +8,14 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
- * Everything has to be in the module being compiled: the plugin only finds @Structural interfaces declared there, and
- * only classes compiled there can gain a supertype. Neither direction works across modules yet, and both fail with a
- * plain type mismatch instead of breaking anything else. See docs/roadmap.md.
+ * What crosses a module boundary. A module compiled with the plugin publishes its @Structural interfaces in
+ * `META-INF/structural/interfaces.txt`, so classes in a module that depends on it can implement them by shape. The
+ * other direction stays impossible: a class already compiled can't gain a supertype. See docs/roadmap.md.
  */
 class OtherModulesTest {
-    /** Compiles [sources] without the plugin and returns the directory holding the class files. */
-    private fun library(vararg sources: com.tschuchort.compiletesting.SourceFile): File {
-        val compiled = compile(*sources, withPlugin = false)
+    /** Compiles [sources] and returns the directory holding the class files. */
+    private fun library(vararg sources: com.tschuchort.compiletesting.SourceFile, withPlugin: Boolean = true): File {
+        val compiled = compile(*sources, withPlugin = withPlugin)
         assertTrue(compiled.succeeded, compiled.messages)
         return File(compiled.loadClass("test.Marker").protectionDomain.codeSource.location.toURI())
     }
@@ -23,13 +23,46 @@ class OtherModulesTest {
     private val marker = kotlin("Marker.kt", "package test\nclass Marker")
 
     @Test
-    fun `an interface from another module is not found`() {
+    fun `a module publishes the interfaces it declares`() {
+        val classes = library(SIZED, marker)
+        val index = File(classes, StructuralIndexFile.PATH)
+        assertTrue(index.isFile, "expected an index at ${index.path}")
+        assertEquals("test/Sized\n", index.readText())
+    }
+
+    @Test
+    fun `no index is written by a module that declares none`() {
+        val classes = library(marker)
+        assertFalse(File(classes, StructuralIndexFile.PATH).exists())
+    }
+
+    @Test
+    fun `a class implements an interface published by another module`() {
         val classes = library(SIZED, marker)
         val compiled = compile(
-            kotlin("Main.kt", "package test\nclass Rectangular(val width: Int, val height: Int)\nfun run() = size(Rectangular(2, 2))"),
+            kotlin(
+                "Main.kt",
+                """
+                package app
+                import test.Sized
+                import test.size
+                class Rectangular(val width: Int, val height: Int)
+                fun run(): Any = listOf(size(Rectangular(2, 3)), Rectangular(2, 3) is Sized)
+                """,
+            ),
             classpath = listOf(classes),
         )
-        assertFalse(compiled.succeeded)
+        assertEquals(listOf(6, true), compiled.run("app.MainKt"))
+    }
+
+    @Test
+    fun `an interface from a module compiled without the plugin is not found`() {
+        val classes = library(SIZED, marker, withPlugin = false)
+        val compiled = compile(
+            kotlin("Main.kt", "package app\nclass Rectangular(val width: Int, val height: Int)\nfun run() = test.size(Rectangular(2, 2))"),
+            classpath = listOf(classes),
+        )
+        assertFalse(compiled.succeeded, "without an index there is nothing to discover")
         assertContains(compiled.errors.joinToString("\n"), "mismatch", ignoreCase = true)
     }
 

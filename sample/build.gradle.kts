@@ -8,6 +8,7 @@ kotlin {
 
 dependencies {
     implementation(project(":structural-annotations"))
+    implementation(project(":sample-library"))
     kotlinCompilerPluginClasspath(project(":structural-compiler-plugin"))
     testImplementation(kotlin("test"))
 }

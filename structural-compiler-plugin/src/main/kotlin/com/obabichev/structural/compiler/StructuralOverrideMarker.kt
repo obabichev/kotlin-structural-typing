@@ -18,15 +18,21 @@ import org.jetbrains.kotlin.fir.symbols.impl.FirRegularClassSymbol
 import org.jetbrains.kotlin.fir.types.FirResolvedTypeRef
 import org.jetbrains.kotlin.fir.types.classId
 import org.jetbrains.kotlin.fir.types.coneType
+import org.jetbrains.kotlin.name.ClassId
 
 /**
  * Marks the properties and functions that implement a @Structural interface added by [StructuralSupertypeGenerator] as
  * `override`, matched by full signature so unrelated overloads stay untouched. Supertypes written in source are left
  * alone, so a missing `override` there is still a normal compiler error.
  */
-class StructuralOverrideMarker(session: FirSession) : FirStatusTransformerExtension(session) {
+class StructuralOverrideMarker(
+    session: FirSession,
+    private val imported: List<ClassId> = emptyList(),
+) : FirStatusTransformerExtension(session) {
     private val types = ResolvedTypes(session)
-    private val structuralInterfaces by lazy { session.structuralInterfaces(types).associateBy { it.classId } }
+    private val structuralInterfaces by lazy {
+        session.structuralInterfaces(types, imported).associateBy { it.classId }
+    }
 
     override fun FirDeclarationPredicateRegistrar.registerPredicates() {
         register(STRUCTURAL_PREDICATE)

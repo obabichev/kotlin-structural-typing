@@ -25,8 +25,11 @@ import org.jetbrains.kotlin.fir.types.FirResolvedTypeRef
 import org.jetbrains.kotlin.fir.types.classId
 import org.jetbrains.kotlin.name.ClassId
 
-class StructuralCheckers(session: FirSession) : FirAdditionalCheckersExtension(session) {
-    private val index = StructuralIndex(session)
+class StructuralCheckers(
+    session: FirSession,
+    imported: List<ClassId> = emptyList(),
+) : FirAdditionalCheckersExtension(session) {
+    private val index = StructuralIndex(session, imported)
 
     override fun FirDeclarationPredicateRegistrar.registerPredicates() {
         register(STRUCTURAL_PREDICATE)
@@ -43,9 +46,9 @@ class StructuralCheckers(session: FirSession) : FirAdditionalCheckersExtension(s
 }
 
 /** The @Structural interfaces of the module, collected once per session rather than per declaration or call. */
-internal class StructuralIndex(val session: FirSession) {
+internal class StructuralIndex(val session: FirSession, private val imported: List<ClassId> = emptyList()) {
     val types = ResolvedTypes(session)
-    val interfaces: List<StructuralInterface> by lazy { session.structuralInterfaces(types) }
+    val interfaces: List<StructuralInterface> by lazy { session.structuralInterfaces(types, imported) }
 
     fun byClassId(classId: ClassId): StructuralInterface? = interfaces.firstOrNull { it.classId == classId }
 

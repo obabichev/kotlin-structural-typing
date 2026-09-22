@@ -14,11 +14,17 @@ import org.jetbrains.kotlin.fir.types.builder.buildResolvedTypeRef
 import org.jetbrains.kotlin.fir.types.classId
 import org.jetbrains.kotlin.fir.types.coneType
 import org.jetbrains.kotlin.fir.types.constructClassLikeType
+import org.jetbrains.kotlin.name.ClassId
 
 /** Adds every @Structural interface that a class matches as a supertype of that class. */
-class StructuralSupertypeGenerator(session: FirSession) : FirSupertypeGenerationExtension(session) {
+class StructuralSupertypeGenerator(
+    session: FirSession,
+    private val imported: List<ClassId> = emptyList(),
+) : FirSupertypeGenerationExtension(session) {
     private val fileScopes = FileScopes(session)
-    private val structuralInterfaces by lazy { session.structuralInterfaces(SupertypePhaseTypes(session, fileScopes)) }
+    private val structuralInterfaces by lazy {
+        session.structuralInterfaces(SupertypePhaseTypes(session, fileScopes), imported)
+    }
 
     override fun FirDeclarationPredicateRegistrar.registerPredicates() {
         register(STRUCTURAL_PREDICATE)

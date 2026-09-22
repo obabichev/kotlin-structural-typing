@@ -54,12 +54,23 @@ internal class StructuralInterface(val symbol: FirRegularClassSymbol, val requir
     val classId: ClassId get() = symbol.classId
 }
 
-/** The usable @Structural interfaces declared in the module being compiled. */
-internal fun FirSession.structuralInterfaces(types: TypeLookup): List<StructuralInterface> =
-    predicateBasedProvider.getSymbolsByPredicate(STRUCTURAL_PREDICATE)
+/**
+ * The usable @Structural interfaces: those declared in the module being compiled, and those [imported] from
+ * dependencies that published an index (see [StructuralIndexFile]). A module declaring an interface itself wins over a
+ * dependency publishing the same one.
+ */
+internal fun FirSession.structuralInterfaces(
+    types: TypeLookup,
+    imported: List<ClassId> = emptyList(),
+): List<StructuralInterface> {
+    val declared = predicateBasedProvider.getSymbolsByPredicate(STRUCTURAL_PREDICATE)
         .filterIsInstance<FirRegularClassSymbol>()
+    val fromDependencies = imported.mapNotNull { symbolProvider.getClassLikeSymbolByClassId(it) as? FirRegularClassSymbol }
+    return (declared + fromDependencies)
+        .distinctBy { it.classId }
         .filter { it.classKind == ClassKind.INTERFACE }
         .mapNotNull { structuralInterface(it, types) }
+}
 
 /**
  * Collects the abstract members of [iface] and all its superinterfaces. Returns null when a class can't safely implement

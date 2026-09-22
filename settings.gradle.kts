@@ -23,4 +23,5 @@ include(
     ":structural-gradle-plugin",
     ":structural-intellij-plugin",
     ":sample",
+    ":sample-library",
 )
