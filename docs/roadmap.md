@@ -39,12 +39,6 @@ the containing classes.
 Report a warning on a `@Structural` interface that can never be used (type parameters, generic members, unresolved
 superinterfaces), saying why.
 
-### Interfaces from other modules
-
-Libraries compiled with the plugin emit an index of their `@Structural` interfaces (e.g. marker declarations in a
-well-known package); consumers read it with the compiler's symbol names provider. Listing a dependency package during
-supertype resolution was verified in the spike.
-
 ### Controlling accidental matches
 
 Every matching class in the module implements the interface. Consider:

@@ -48,6 +48,14 @@ class StructuralGradlePlugin : KotlinCompilerPluginSupportPlugin {
     override fun getPluginArtifact(): SubpluginArtifact =
         SubpluginArtifact(ARTIFACT_GROUP, "structural-compiler-plugin", ARTIFACT_VERSION)
 
-    override fun applyToCompilation(kotlinCompilation: KotlinCompilation<*>): Provider<List<SubpluginOption>> =
-        kotlinCompilation.target.project.provider { emptyList() }
+    /**
+     * Names the @Structural interfaces published by this compilation's dependencies, so classes here can implement
+     * them. Resolved lazily: the compile classpath must not be resolved while the build is being configured.
+     */
+    override fun applyToCompilation(kotlinCompilation: KotlinCompilation<*>): Provider<List<SubpluginOption>> {
+        val classpath = kotlinCompilation.compileDependencyFiles
+        return kotlinCompilation.target.project.provider {
+            StructuralIndexReader.read(classpath).map { SubpluginOption("interface", it) }
+        }
+    }
 }

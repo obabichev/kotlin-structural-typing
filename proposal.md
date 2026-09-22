@@ -76,10 +76,12 @@ the IDE plugin in `.idea/externalDependencies.xml`, so IntelliJ suggests install
 | `structural-compiler-plugin` | The K2 compiler plugin, registered through `META-INF/services` |
 | `structural-intellij-plugin` | IntelliJ plugin (ID `com.obabichev.structural.ide`, IntelliJ 2026.2) that makes the IDE run the compiler plugin |
 | `sample` | A Gradle module using the plugin; its tests are the end-to-end check |
+| `sample-library` | A module publishing a `@Structural` interface that `sample` matches from its own classes |
 
 Plugin files:
 
-1. **StructuralPluginRegistrar**: registers the FIR extensions and diagnostics.
+1. **StructuralPluginRegistrar** / **StructuralCommandLineProcessor**: register the FIR extensions and diagnostics, and
+   read the interfaces published by dependencies.
 2. **StructuralInterfaces**: finds usable `@Structural` interfaces, collects their required members and a class's
    members, and decides whether a member satisfies a requirement.
 3. **StructuralTypes**: how types are resolved and compared in each compiler phase (see "Types during supertype
@@ -88,6 +90,8 @@ Plugin files:
 5. **StructuralOverrideMarker**: marks implementing properties and functions `override`.
 6. **StructuralCheckers** / **StructuralDiagnostics** / **StructuralMismatch**: the near-miss diagnostics and the
    reasons they report.
+7. **StructuralIndexFile** / **StructuralIndexWriter**: the index of interfaces a module publishes for other modules
+   (see "Interfaces from other modules").
 
 ## Rules
 
@@ -194,6 +198,37 @@ w: 'Square' matches @Structural interface 'com.example.Sized' but doesn't implem
    inferred types: width. Declare their types explicitly.
 ```
 
+### Interfaces from other modules
+
+A `@Structural` interface may be declared in a dependency, so a multi-module project doesn't have to copy it into every
+module with matching classes. What the compiler allows decides the design:
+
+- an interface from a dependency **can** be loaded by class id, with its annotation and its members' types readable;
+- the classifiers of a **known** package can be listed;
+- but the packages on the classpath **cannot** be enumerated (`getPackageNames()` returns null).
+
+So the names have to be written down at compile time. A module compiled with the plugin publishes them:
+
+```
+META-INF/structural/interfaces.txt
+    com/example/shapes/Sized
+```
+
+The file is written from IR, where a module is finished and its declarations are available in one place exactly once,
+into the module's output directory, which Gradle packs into the jar.
+
+A module compiling against it learns the names in one of two ways:
+
+1. the Gradle plugin reads the indexes on the compile classpath and passes each interface as a compiler plugin option;
+2. failing that, the compiler plugin reads them off the classpath itself (plain `kotlinc`, and the plugin's own tests).
+
+Both work for a build. Only the first reaches IntelliJ, which passes a module's compiler plugin options from the Gradle
+import but hands plugins no classpath to read; a newly published interface therefore needs a re-import before the editor
+sees it. Interfaces declared in the module being compiled win over a dependency publishing the same one.
+
+This does not change the other direction: a class already compiled can never gain a supertype, so matching classes still
+have to be compiled together with each other.
+
 ## Testing
 
 - **Plugin tests** (`structural-compiler-plugin`) compile snippets with the plugin using kotlin-compile-testing
@@ -206,11 +241,12 @@ w: 'Square' matches @Structural interface 'com.example.Sized' but doesn't implem
   - `EnumClassesTest`: enum classes
   - `TypeResolutionTest`: types resolved in the right file, file order, compiler state, nested types
   - `UnsupportedInterfacesTest`: interfaces that are never added
+  - `OtherModulesTest`: publishing the index, and what crosses a module boundary in each direction
   - `InferredMemberTypesTest`: the inferred-types warning
   - `NearMissTest`: what a class that nearly matches is told, at the call site and on the class
 - **`sample`**: a real Gradle build using the plugin through `kotlinCompilerPluginClasspath`, with one test file per
   user-facing feature (`BasicUsageTest`, `CallSitesTest`, `PropertiesTest`, `InheritanceTest`, `EnumClassesTest`,
-  `FunctionsAndSuperinterfacesTest`).
+  `FunctionsAndSuperinterfacesTest`, `OtherModulesTest` against `:sample-library`).
 - **`structural-intellij-plugin`**: unit tests for recognizing the compiler plugin jar, and `verifyPluginStructure`.
   Whether the IDE actually loads the plugin is checked manually in IntelliJ.
 

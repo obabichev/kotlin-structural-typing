@@ -67,7 +67,8 @@ fun main() {
 ```
 
 Nothing is written on the classes: no annotations, no wrappers, no generated code. Member types have to be declared
-explicitly, and the interface and its matching classes must be compiled in the same module.
+explicitly, and the classes matching an interface must be compiled in the same module as each other; the interface
+itself can come from another module compiled with the plugin.
 
 **3. For IntelliJ,** install the IDE plugin, otherwise the editor reports `Argument type mismatch` errors that the build
 doesn't have: download the zip from the
@@ -106,6 +107,7 @@ signature. [`proposal.md`](proposal.md) has the exact rules.
 | `structural-gradle-plugin` | Gradle plugin that applies both to a module |
 | `structural-intellij-plugin` | IntelliJ plugin so the IDE analyzes code the same way as the build |
 | `sample` | A Gradle module using the plugin; its tests show every supported case |
+| `sample-library` | A module publishing a `@Structural` interface that `sample` matches from its own classes |
 
 | Document | Contents |
 |---|---|
@@ -149,12 +151,12 @@ Without `-Pstructural.ideaPath`, Gradle downloads IntelliJ IDEA 2026.2 to build 
 
 ## Status
 
-A proof of concept: 72 tests cover the supported cases, and the whole build passes without compiler warnings. It is
+A proof of concept: 78 tests cover the supported cases, and the whole build passes without compiler warnings. It is
 published for trying out, not for production use. The main limitations:
 
 - generic interfaces and generic members are ignored ([roadmap](docs/roadmap.md))
-- interfaces and the classes matching them must be compiled in the same module; other modules can then use those
-  classes through the interface
+- an interface can come from another module compiled with the plugin, but the classes matching it must be compiled
+  together; other modules can then use those classes through the interface
 - member types must be explicit
 - the plugin uses internal, experimental compiler APIs, so expect breakage on Kotlin updates
 

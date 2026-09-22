@@ -67,6 +67,19 @@ class OtherModulesTest {
     }
 
     @Test
+    fun `the build can name the interfaces instead of the plugin finding them`() {
+        val classes = library(SIZED, marker)
+        assertTrue(File(classes, StructuralIndexFile.PATH).delete(), "nothing left to discover on the classpath")
+
+        val compiled = compile(
+            kotlin("Main.kt", "package app\nclass Rectangular(val width: Int, val height: Int)\nfun run() = test.size(Rectangular(2, 3))"),
+            classpath = listOf(classes),
+            interfaces = listOf("test/Sized"),
+        )
+        assertEquals(6, compiled.run("app.MainKt"), "IntelliJ gets the interfaces this way, not from the classpath")
+    }
+
+    @Test
     fun `a class from another module never gains the interface`() {
         val classes = library(kotlin("Model.kt", "package test.model\nclass Rectangular(val width: Int, val height: Int)"), marker)
         val compiled = compile(

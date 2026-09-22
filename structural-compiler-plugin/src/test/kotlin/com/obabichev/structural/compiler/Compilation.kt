@@ -1,6 +1,7 @@
 package com.obabichev.structural.compiler
 
 import com.tschuchort.compiletesting.KotlinCompilation
+import com.tschuchort.compiletesting.PluginOption
 import com.tschuchort.compiletesting.SourceFile
 import java.io.File
 import kotlin.test.assertTrue
@@ -20,11 +21,23 @@ class Compiled(val succeeded: Boolean, val messages: String, private val classLo
 
 fun kotlin(name: String, code: String): SourceFile = SourceFile.kotlin(name, code.trimIndent())
 
-/** Compiles [sources] with the structural compiler plugin. */
-fun compile(vararg sources: SourceFile, classpath: List<File> = emptyList(), withPlugin: Boolean = true): Compiled {
+/**
+ * Compiles [sources] with the structural compiler plugin. [interfaces] names @Structural interfaces from dependencies
+ * the way the Gradle plugin does, through the plugin's command line option, instead of letting the plugin find them.
+ */
+fun compile(
+    vararg sources: SourceFile,
+    classpath: List<File> = emptyList(),
+    withPlugin: Boolean = true,
+    interfaces: List<String> = emptyList(),
+): Compiled {
     val result = KotlinCompilation().apply {
         this.sources = sources.toList()
-        if (withPlugin) compilerPluginRegistrars = listOf(StructuralPluginRegistrar())
+        if (withPlugin) {
+            compilerPluginRegistrars = listOf(StructuralPluginRegistrar())
+            commandLineProcessors = listOf(StructuralCommandLineProcessor())
+            pluginOptions = interfaces.map { PluginOption("com.obabichev.structural", "interface", it) }
+        }
         inheritClassPath = true
         classpaths = classpaths + classpath
         messageOutputStream = System.out
