@@ -4,6 +4,7 @@ package com.obabichev.structural.compiler
 
 import org.jetbrains.kotlin.fir.FirSession
 import org.jetbrains.kotlin.fir.declarations.FirCallableDeclaration
+import org.jetbrains.kotlin.fir.declarations.FirDeclarationOrigin
 import org.jetbrains.kotlin.fir.declarations.FirClass
 import org.jetbrains.kotlin.fir.declarations.FirTypeAlias
 import org.jetbrains.kotlin.fir.declarations.FirValueParameter
@@ -16,6 +17,7 @@ import org.jetbrains.kotlin.fir.resolve.providers.symbolProvider
 import org.jetbrains.kotlin.fir.resolve.typeResolver
 import org.jetbrains.kotlin.fir.scopes.createImportingScopes
 import org.jetbrains.kotlin.fir.symbols.SymbolInternals
+import org.jetbrains.kotlin.fir.symbols.impl.FirCallableSymbol
 import org.jetbrains.kotlin.fir.symbols.impl.FirRegularClassSymbol
 import org.jetbrains.kotlin.fir.types.ConeClassLikeType
 import org.jetbrains.kotlin.fir.types.ConeErrorType
@@ -79,6 +81,10 @@ internal class ResolvedTypes(private val session: FirSession) : TypeLookup {
  * declaring it, and types of the class being processed with the compiler's resolver for it (which also sees nested
  * classes).
  *
+ * Declarations that aren't from source -- an interface published by a dependency -- are read through their symbols
+ * instead. Their type references are only resolved on demand when IntelliJ analyzes code, so reading them directly
+ * finds nothing and the class silently doesn't match.
+ *
  * The compiler's type checker must not be used here: it would compute and cache supertypes of classes the compiler
  * hasn't processed yet, and later checks in unrelated code would use the incomplete result. Types are compared
  * structurally instead, walking declared supertypes for subtyping.
@@ -90,13 +96,19 @@ internal class SupertypePhaseTypes(
     private val currentClassResolver: FirSupertypeGenerationExtension.TypeResolveService? = null,
 ) : TypeLookup {
     override fun returnType(declaration: FirCallableDeclaration, owner: FirRegularClassSymbol): ConeKotlinType? =
-        resolve(declaration.returnTypeRef, owner)
+        if (declaration.isFromSource) resolve(declaration.returnTypeRef, owner) else declaration.symbol.typeOrNull()
 
     override fun parameterType(parameter: FirValueParameter, owner: FirRegularClassSymbol): ConeKotlinType? =
-        resolve(parameter.returnTypeRef, owner)
+        if (parameter.isFromSource) resolve(parameter.returnTypeRef, owner) else parameter.symbol.typeOrNull()
 
     override fun superTypes(symbol: FirRegularClassSymbol): List<ConeKotlinType> =
-        symbol.fir.superTypeRefs.mapNotNull { resolve(it, symbol) }
+        if (symbol.origin == FirDeclarationOrigin.Source) symbol.fir.superTypeRefs.mapNotNull { resolve(it, symbol) }
+        else runCatching { symbol.resolvedSuperTypes }.getOrDefault(emptyList())
+
+    private val FirCallableDeclaration.isFromSource: Boolean get() = origin == FirDeclarationOrigin.Source
+
+    private fun FirCallableSymbol<*>.typeOrNull(): ConeKotlinType? =
+        runCatching { resolvedReturnType }.getOrNull()?.takeUnless { it is ConeErrorType }
 
     private fun resolve(typeRef: FirTypeRef, owner: FirRegularClassSymbol): ConeKotlinType? {
         val type = when {

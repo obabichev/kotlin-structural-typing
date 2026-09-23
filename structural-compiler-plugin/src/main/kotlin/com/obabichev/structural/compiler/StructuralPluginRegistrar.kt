@@ -17,7 +17,13 @@ class StructuralPluginRegistrar : CompilerPluginRegistrar() {
     override val supportsK2: Boolean = true
 
     override fun ExtensionStorage.registerExtensions(configuration: CompilerConfiguration) {
-        FirExtensionRegistrarAdapter.registerExtension(StructuralFirRegistrar(configuration.importedInterfaces()))
+        val imported = configuration.importedInterfaces()
+        StructuralDebug.note(
+            "registerExtensions options=${configuration.getList(IMPORTED_INTERFACES)} " +
+                "contentRoots=${configuration.get(CLIConfigurationKeys.CONTENT_ROOTS)?.size} " +
+                "output=${configuration.get(JVMConfigurationKeys.OUTPUT_DIRECTORY)} imported=$imported",
+        )
+        FirExtensionRegistrarAdapter.registerExtension(StructuralFirRegistrar(imported))
         // No output directory when the IDE analyzes code, or when compiling straight to a jar: nothing to publish then.
         configuration.get(JVMConfigurationKeys.OUTPUT_DIRECTORY)?.let { output ->
             IrGenerationExtension.registerExtension(StructuralIndexWriter(output))

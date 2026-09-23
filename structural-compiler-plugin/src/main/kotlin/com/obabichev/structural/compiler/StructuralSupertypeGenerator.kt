@@ -24,6 +24,7 @@ class StructuralSupertypeGenerator(
     private val fileScopes = FileScopes(session)
     private val structuralInterfaces by lazy {
         session.structuralInterfaces(SupertypePhaseTypes(session, fileScopes), imported)
+            .also { StructuralDebug.note("supertype generator imported=$imported found=${it.map { i -> i.classId }}") }
     }
 
     override fun FirDeclarationPredicateRegistrar.registerPredicates() {
@@ -45,6 +46,14 @@ class StructuralSupertypeGenerator(
         val added = structuralInterfaces
             .filter { it.classId !in existing && session.implementsByShape(members, it, types) }
             .map { it.classId.constructClassLikeType(emptyArray(), isMarkedNullable = false) }
+
+        structuralInterfaces.filter { it.classId in imported && it.classId !in existing }.forEach { iface ->
+            StructuralDebug.note(
+                "match ${klass.name} vs ${iface.classId}: members=${members.map { m -> m.label }} " +
+                    "requirements=${iface.requirements.map { r -> r.label }} " +
+                    "reasons=${session.explain(members, iface, types).map { r -> r.render() }}",
+            )
+        }
 
         if (klass.classKind == ClassKind.ENUM_CLASS && added.isNotEmpty()) {
             // The command-line compiler only writes computed supertypes back to classes that started with an unresolved
