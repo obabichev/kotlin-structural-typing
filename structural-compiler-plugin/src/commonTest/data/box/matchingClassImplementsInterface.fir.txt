@@ -1,0 +1,56 @@
+FILE: matchingClassImplementsInterface.kt
+    @R|com/obabichev/structural/Structural|() public abstract interface Sized : R|kotlin/Any| {
+        public abstract val width: R|kotlin/Int|
+            public get(): R|kotlin/Int|
+
+        public abstract val height: R|kotlin/Int|
+            public get(): R|kotlin/Int|
+
+        public abstract fun area(): R|kotlin/Int|
+
+    }
+    public final class Rectangular : R|kotlin/Any|, R|Sized| {
+        public constructor(width: R|kotlin/Int|, height: R|kotlin/Int|, color: R|kotlin/String|): R|Rectangular| {
+            super<R|kotlin/Any|>()
+        }
+
+        public final override val width: R|kotlin/Int| = R|<local>/width|
+            public get(): R|kotlin/Int|
+
+        public final override val height: R|kotlin/Int| = R|<local>/height|
+            public get(): R|kotlin/Int|
+
+        public final val color: R|kotlin/String| = R|<local>/color|
+            public get(): R|kotlin/String|
+
+        public final override fun area(): R|kotlin/Int| {
+            ^area this@R|/Rectangular|.R|/Rectangular.width|.R|kotlin/Int.times|(this@R|/Rectangular|.R|/Rectangular.height|)
+        }
+
+    }
+    public final fun size(target: R|Sized|): R|kotlin/Int| {
+        ^size R|<local>/target|.R|/Sized.area|()
+    }
+    public final fun box(): R|kotlin/String| {
+        lval rectangular: R|Rectangular| = R|/Rectangular.Rectangular|(Int(2), Int(3), String(red))
+        when () {
+            !=(R|/size|(R|<local>/rectangular|), Int(6)) ->  {
+                ^box String(Fail: size)
+            }
+        }
+
+        when () {
+            ((R|<local>/rectangular| as R|kotlin/Any|) !is R|Sized|) ->  {
+                ^box String(Fail: is check)
+            }
+        }
+
+        lval sized: R|Sized| = R|<local>/rectangular|
+        when () {
+            !==(R|<local>/sized|, R|<local>/rectangular|) ->  {
+                ^box String(Fail: identity)
+            }
+        }
+
+        ^box String(OK)
+    }
