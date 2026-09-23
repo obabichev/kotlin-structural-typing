@@ -2,7 +2,7 @@ package com.obabichev.structural.compiler
 
 import org.jetbrains.kotlin.compiler.plugin.AbstractCliOption
 import org.jetbrains.kotlin.compiler.plugin.CliOption
-import org.jetbrains.kotlin.compiler.plugin.CommandLineProcessor
+import org.jetbrains.kotlin.compiler.plugin.devkit.DevKitCLP
 import org.jetbrains.kotlin.config.CompilerConfiguration
 import org.jetbrains.kotlin.config.CompilerConfigurationKey
 
@@ -23,8 +23,7 @@ private val INTERFACE_OPTION = CliOption(
  * the classpath itself. Both work when compiling; only this one reaches IntelliJ, which passes a module's compiler
  * plugin options from the Gradle import but doesn't hand plugins a classpath to read.
  */
-class StructuralCommandLineProcessor : CommandLineProcessor {
-    override val pluginId: String = "com.obabichev.structural"
+class StructuralCommandLineProcessor : DevKitCLP {
     override val pluginOptions: Collection<CliOption> = listOf(INTERFACE_OPTION)
 
     override fun processOption(option: AbstractCliOption, value: String, configuration: CompilerConfiguration) {
