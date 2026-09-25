@@ -11,6 +11,8 @@ kotlin {
 
 dependencies {
     compileOnly(libs.kotlin.compiler.embeddable)
+    // Matching a dependency class is decided from its bytes, by the same code the runtime classloader uses.
+    implementation(project(":structural-runtime"))
 
     testImplementation(project(":structural-annotations"))
     testImplementation(libs.kotlin.compiler.embeddable)
