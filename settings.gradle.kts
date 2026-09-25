@@ -22,5 +22,7 @@ include(
     ":structural-compiler-plugin",
     ":structural-gradle-plugin",
     ":structural-intellij-plugin",
+    ":structural-runtime",
     ":sample",
+    ":sample-dependency",
 )
