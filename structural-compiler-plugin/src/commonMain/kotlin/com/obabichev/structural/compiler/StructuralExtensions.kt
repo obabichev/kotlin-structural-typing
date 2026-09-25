@@ -3,6 +3,7 @@ package com.obabichev.structural.compiler
 import org.jetbrains.kotlin.backend.common.extensions.IrGenerationExtension
 import org.jetbrains.kotlin.cli.common.CLIConfigurationKeys
 import org.jetbrains.kotlin.cli.jvm.config.JvmClasspathRoot
+import org.jetbrains.kotlin.cli.jvm.config.jvmClasspathRoots
 import org.jetbrains.kotlin.compiler.plugin.CompilerPluginRegistrar
 import org.jetbrains.kotlin.config.CompilerConfiguration
 import org.jetbrains.kotlin.config.JVMConfigurationKeys
@@ -10,6 +11,7 @@ import org.jetbrains.kotlin.fir.FirSession
 import org.jetbrains.kotlin.fir.extensions.FirExtensionRegistrar
 import org.jetbrains.kotlin.fir.extensions.FirExtensionRegistrarAdapter
 import org.jetbrains.kotlin.name.ClassId
+import java.io.File
 
 /**
  * Loaded through `META-INF/services` wherever the plugin is used without the DevKit's generated entry point: by the
@@ -28,7 +30,9 @@ class StructuralPluginRegistrar : CompilerPluginRegistrar() {
  * Kotlin version, and the copy of the plugin the IntelliJ plugin hands to the IDE brings its own.
  */
 fun CompilerPluginRegistrar.ExtensionStorage.registerStructuralExtensions(configuration: CompilerConfiguration) {
-    FirExtensionRegistrarAdapter.registerExtension(StructuralFirRegistrar(configuration.importedInterfaces()))
+    FirExtensionRegistrarAdapter.registerExtension(
+        StructuralFirRegistrar(configuration.importedInterfaces(), configuration.jvmClasspathRoots),
+    )
     // No output directory when the IDE analyzes code, or when compiling straight to a jar: nothing to publish then.
     configuration.get(JVMConfigurationKeys.OUTPUT_DIRECTORY)?.let { output ->
         IrGenerationExtension.registerExtension(StructuralIndexWriter(output))
@@ -46,12 +50,20 @@ private fun CompilerConfiguration.importedInterfaces(): List<ClassId> {
     return StructuralIndexFile.readFrom(classpath)
 }
 
-/** [imported]: @Structural interfaces published by dependencies, which this module can implement by shape too. */
-class StructuralFirRegistrar(private val imported: List<ClassId> = emptyList()) : FirExtensionRegistrar() {
+/**
+ * [imported]: @Structural interfaces published by dependencies, which this module can implement by shape too.
+ * [classpath]: where to look for dependency classes that match one, which the compiler reads rather than compiles.
+ */
+class StructuralFirRegistrar(
+    private val imported: List<ClassId> = emptyList(),
+    private val classpath: List<File> = emptyList(),
+) : FirExtensionRegistrar() {
     override fun ExtensionRegistrarContext.configurePlugin() {
         +{ session: FirSession -> StructuralSupertypeGenerator(session, imported) }
         +{ session: FirSession -> StructuralOverrideMarker(session, imported) }
         +{ session: FirSession -> StructuralCheckers(session, imported) }
+        // Gives dependency classes their interfaces as the compiler deserializes them; see StructuralDeserialization.
+        +{ session: FirSession -> StructuralLibrarySessionHook(session, classpath) }
         registerDiagnosticContainers(StructuralDiagnostics)
     }
 }

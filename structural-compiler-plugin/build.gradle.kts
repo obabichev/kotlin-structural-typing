@@ -2,6 +2,11 @@ plugins {
     pluginDevKit("compiler-plugin")
 }
 
+dependencies {
+    // Matching a dependency class is decided from its bytes, by the same code the runtime classloader uses.
+    "commonMainImplementation"(project(":structural-runtime"))
+}
+
 pluginDevKit {
     // Where the compiler API changed, the source sets split and SourceElements.kt has one actual per range.
     versionHierarchy {
