@@ -4,19 +4,6 @@ import org.jetbrains.kotlin.compiler.plugin.AbstractCliOption
 import org.jetbrains.kotlin.compiler.plugin.CliOption
 import org.jetbrains.kotlin.compiler.plugin.devkit.DevKitCLP
 import org.jetbrains.kotlin.config.CompilerConfiguration
-import org.jetbrains.kotlin.config.CompilerConfigurationKey
-
-/** @Structural interfaces the build found on the compile classpath, one option per interface. */
-internal val IMPORTED_INTERFACES: CompilerConfigurationKey<List<String>> =
-    CompilerConfigurationKey.create("@Structural interfaces published by dependencies")
-
-private val INTERFACE_OPTION = CliOption(
-    optionName = "interface",
-    valueDescription = "<class id>",
-    description = "A @Structural interface published by a dependency, e.g. com/example/Sized",
-    required = false,
-    allowMultipleOccurrences = true,
-)
 
 /**
  * Lets the Gradle plugin name the interfaces a module can implement, instead of the compiler plugin reading them from

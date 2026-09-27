@@ -38,9 +38,18 @@ configurations.runtimeClasspath {
 // The compiler plugin sources, compiled again against the Kotlin compiler shipped inside the IDE, so the IDE never runs a
 // build made for a different compiler version.
 val ideCompilerPlugin: SourceSet = sourceSets.create("ideCompilerPlugin") {
-    kotlin.srcDir(rootProject.file("structural-compiler-plugin/src/main/kotlin"))
-    resources.srcDir(rootProject.file("structural-compiler-plugin/src/main/resources"))
+    // The compiler plugin's own sources, compiled against the IDE's Kotlin compiler. The files that depend on the
+    // DevKit -- its entry points and the expect/actual shim -- are replaced by this module's own, in
+    // src/ideCompilerPlugin/kotlin, because the IDE copy is a plain JVM compilation.
+    kotlin.srcDir(rootProject.file("structural-compiler-plugin/src/commonMain/kotlin"))
     compileClasspath += sourceSets.main.get().compileClasspath
+}
+
+// The DevKit's entry points and the expect/actual shim can't compile in a plain JVM source set.
+tasks.named<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>("compileIdeCompilerPluginKotlin") {
+    exclude("**/StructuralComponentRegistrar.kt")
+    exclude("**/StructuralCommandLineProcessor.kt")
+    exclude("**/SourceElements.kt")
 }
 
 val ideCompilerPluginJar = tasks.register<Jar>("ideCompilerPluginJar") {
