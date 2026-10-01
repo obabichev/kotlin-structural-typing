@@ -70,12 +70,13 @@ internal class StructuralDeserializationExtension(
  */
 internal class StructuralLibrarySessionHook(
     session: FirSession,
+    private val interfaces: List<String>,
     private val classpath: List<File>,
 ) : FirTypeAttributeExtension(session) {
 
     init {
         if (session.kind == FirSession.Kind.Library) {
-            session.register(StructuralDeserializationExtension(session, matchesFor(classpath)))
+            session.register(StructuralDeserializationExtension(session, matchesFor(interfaces, classpath)))
         }
     }
 
@@ -84,18 +85,30 @@ internal class StructuralLibrarySessionHook(
     override fun convertAttributeToAnnotation(attribute: ConeAttribute<*>): FirAnnotation? = null
 }
 
-/** `com/example/Outer.Inner` as the JVM writes it, which is what the matcher keys on. */
-private fun ClassId.internalName(): String = asString().replace('.', '$')
+/** `com/example/Outer$Inner` as the JVM writes it, which is what the matcher keys on. */
+internal fun ClassId.internalName(): String = asString().replace('.', '$')
 
 /**
- * Scanning a classpath for `@Structural` interfaces costs a pass over its class files, and the same classpath is used
- * by every session of a compilation, so the result is kept.
+ * Which interfaces to match dependency classes against.
+ *
+ * Normally the plugin's own discovery answers this: a module built with the plugin publishes the interfaces it
+ * declares, the build names them to the compiler, and that is also the only channel IntelliJ passes on. It costs one
+ * file read per dependency instead of a pass over every class file on the classpath.
+ *
+ * A dependency that carries the annotation without having been built with the plugin publishes nothing, so when
+ * discovery found nothing the classpath is scanned after all. Reading the shapes to match against needs the class
+ * files either way.
+ *
+ * The same interfaces and classpath serve every session of a compilation, so the result is kept.
  */
-private val matchesByClasspath = ConcurrentHashMap<List<File>, StructuralMatches>()
+private val matchesByInput = ConcurrentHashMap<Pair<List<String>, List<File>>, StructuralMatches>()
 
-private fun matchesFor(classpath: List<File>): StructuralMatches = matchesByClasspath.getOrPut(classpath) {
-    StructuralMatches(
-        index = StructuralIndex.fromClasspath(ClasspathShapeResolver.urlsOf(classpath)),
-        resolver = ClasspathShapeResolver(classpath),
-    )
-}
+private fun matchesFor(interfaces: List<String>, classpath: List<File>): StructuralMatches =
+    matchesByInput.getOrPut(interfaces to classpath) {
+        val index = when {
+            // Already JVM internal names, nested classes included, so `of` has nothing left to convert.
+            interfaces.isNotEmpty() -> StructuralIndex.of(*interfaces.toTypedArray())
+            else -> StructuralIndex.fromClasspath(ClasspathShapeResolver.urlsOf(classpath))
+        }
+        StructuralMatches(index = index, resolver = ClasspathShapeResolver(classpath))
+    }

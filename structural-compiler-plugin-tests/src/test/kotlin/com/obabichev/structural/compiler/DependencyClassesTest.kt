@@ -121,5 +121,47 @@ class DependencyClassesTest {
         assertTrue(failure is ClassCastException, "expected a failed cast but got ${'$'}failure")
     }
 
+    /**
+     * Which interfaces take part is the build's decision, not a property of the classpath: the plugin matches against
+     * the ones the build names -- published by a module built with the plugin, and the only channel IntelliJ passes on
+     * -- and scans class files only when nothing was named.
+     */
+    @Test
+    fun `only the interfaces the build names are matched against`() {
+        val classes = library(
+            kotlin(
+                "Shapes.kt",
+                """
+                package test
+                import com.obabichev.structural.Structural
+                @Structural interface Sized { val width: Int; val height: Int }
+                @Structural interface Named { val name: String }
+                fun size(target: Sized) = target.width * target.height
+                fun label(target: Named) = target.name
+                """,
+            ),
+            marker,
+        )
+        val model = library(
+            kotlin("Model.kt", "package dep\nclass Rectangular(val width: Int, val height: Int)\nclass Person(val name: String)"),
+            marker,
+        )
+
+        val named = compile(
+            kotlin("Main.kt", "package app\nimport dep.Rectangular\nimport test.size\nfun run() = size(Rectangular(2, 3))"),
+            classpath = listOf(classes, model),
+            interfaces = listOf("test/Sized"),
+        )
+        assertTrue(named.succeeded, named.messages)
+
+        val notNamed = compile(
+            kotlin("Other.kt", "package app\nimport dep.Person\nimport test.label\nfun run() = label(Person(\"ada\"))"),
+            classpath = listOf(classes, model),
+            interfaces = listOf("test/Sized"),
+        )
+        assertFalse(notNamed.succeeded, "Named was not named by the build, so nothing should match it")
+        assertContains(notNamed.errors.joinToString("\n"), "mismatch", ignoreCase = true)
+    }
+
     private fun stdlib(): File = File(Unit::class.java.protectionDomain.codeSource.location.toURI())
 }

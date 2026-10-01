@@ -63,7 +63,7 @@ class StructuralFirRegistrar(
         +{ session: FirSession -> StructuralOverrideMarker(session, imported) }
         +{ session: FirSession -> StructuralCheckers(session, imported) }
         // Gives dependency classes their interfaces as the compiler deserializes them; see StructuralDeserialization.
-        +{ session: FirSession -> StructuralLibrarySessionHook(session, classpath) }
+        +{ session: FirSession -> StructuralLibrarySessionHook(session, imported.map { it.internalName() }, classpath) }
         registerDiagnosticContainers(StructuralDiagnostics)
     }
 }

@@ -100,6 +100,8 @@ val fixtureLibrary: Configuration by configurations.creating
 
 dependencies {
     fixtureLibrary(project(":sample-library"))
+    // A module compiled without the plugin, standing in for a library whose class files nobody can change.
+    fixtureLibrary(project(":sample-dependency"))
 }
 
 tasks.test {
