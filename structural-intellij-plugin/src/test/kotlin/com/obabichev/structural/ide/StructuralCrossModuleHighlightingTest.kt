@@ -8,24 +8,19 @@ import org.jetbrains.kotlin.idea.compiler.configuration.KotlinCommonCompilerArgu
 import java.io.File
 
 /**
- * Analyzes Kotlin code the way the IDE does: through the Kotlin plugin running in this test IDE, which resolves
- * declarations on demand instead of phase by phase. Every bug that only showed in the editor -- enum supertypes, the
- * missing `override`, matching an interface published by another module -- was invisible to the compiler plugin's own
- * tests, because those run the command line compiler.
+ * The same analysis as [StructuralHighlightingTest], for an interface that comes from a dependency rather than from the
+ * file being analyzed. Its own class because the fixture keeps one project per class and this one needs a library on
+ * the module.
  */
-class StructuralHighlightingTest : BasePlatformTestCase() {
-    private val annotation = """
-        package com.obabichev.structural
-        annotation class Structural
-    """.trimIndent()
-
+class StructuralCrossModuleHighlightingTest : BasePlatformTestCase() {
     /**
      * The project is configured once, before anything is analyzed: the frontend keeps a session per project, so a file
      * analyzed before the compiler plugin is configured would be resolved without it and stay that way.
      */
     override fun setUp() {
         super.setUp()
-        useStructuralPlugin()
+        useStructuralPlugin(imported = listOf("com/example/shapes/Sized"))
+        useFixtureLibrary()
     }
 
     /**
@@ -43,6 +38,14 @@ class StructuralHighlightingTest : BasePlatformTestCase() {
         }
     }
 
+    /** Puts `:sample-library`, which publishes a @Structural interface, on the module's classpath. */
+    private fun useFixtureLibrary() {
+        val jars = checkNotNull(System.getProperty("structural.fixtureLibrary")) { "library not passed by Gradle" }
+        for (jar in jars.split(File.pathSeparator).filter { it.endsWith(".jar") }) {
+            PsiTestUtil.addLibrary(myFixture.module, jar)
+        }
+    }
+
     private fun errorsIn(name: String, code: String): List<String> {
         myFixture.configureByText(name, code.trimIndent())
         return myFixture.doHighlighting()
@@ -52,36 +55,21 @@ class StructuralHighlightingTest : BasePlatformTestCase() {
             .filterNot { it.contains("MISSING_DEPENDENCY") }
     }
 
-    fun testPlainKotlinFileHasNoErrors() {
-        assertEmpty(errorsIn("Plain.kt", "class Rectangular(val width: Int, val height: Int)"))
-    }
-
-    /** Proves the Kotlin plugin really analyzes the file: without this, an empty result would mean nothing. */
-    fun testKotlinErrorsAreReported() {
-        assertFalse(errorsIn("Broken.kt", "fun broken(): Int = \"not an int\"").isEmpty())
-    }
-
-    fun testMatchingClassIsAcceptedAsTheInterface() {
-        myFixture.addFileToProject("Structural.kt", annotation)
+    /** The interface comes from a dependency, as it does for anyone with more than one module. */
+    fun testMatchingClassIsAcceptedAsAnInterfaceFromAnotherModule() {
         val errors = errorsIn(
-            "Shapes.kt",
+            "Photos.kt",
             """
-            import com.obabichev.structural.Structural
+            import com.example.shapes.Sized
+            import com.example.shapes.area
 
-            @Structural
-            interface Sized {
-                val width: Int
-                val height: Int
-            }
+            class Photo(val width: Int, val height: Int)
 
-            class Rectangular(val width: Int, val height: Int)
+            fun use(): Int = area(Photo(2, 3))
 
-            fun size(target: Sized) = target.width * target.height
-
-            fun use() = size(Rectangular(2, 3))
+            fun asInterface(): Sized = Photo(2, 3)
             """,
         )
         assertEmpty(errors)
     }
-
 }

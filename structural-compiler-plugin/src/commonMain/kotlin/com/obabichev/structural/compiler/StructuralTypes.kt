@@ -96,19 +96,29 @@ internal class SupertypePhaseTypes(
     private val currentClassResolver: FirSupertypeGenerationExtension.TypeResolveService? = null,
 ) : TypeLookup {
     override fun returnType(declaration: FirCallableDeclaration, owner: FirRegularClassSymbol): ConeKotlinType? =
-        if (declaration.isFromSource) resolve(declaration.returnTypeRef, owner) else declaration.symbol.typeOrNull()
+        resolve(declaration.returnTypeRef, owner) ?: declaration.symbol.typeFromAnotherModule(owner)
 
     override fun parameterType(parameter: FirValueParameter, owner: FirRegularClassSymbol): ConeKotlinType? =
-        if (parameter.isFromSource) resolve(parameter.returnTypeRef, owner) else parameter.symbol.typeOrNull()
+        resolve(parameter.returnTypeRef, owner) ?: parameter.symbol.typeFromAnotherModule(owner)
+
+    /**
+     * The type of a member of a class this module only depends on. Asking a symbol resolves it if needed, which must
+     * not be done to the module's own declarations while supertypes are being decided -- their types may be inferred,
+     * and forcing them would resolve in the wrong order. Another module's declarations are already past that point.
+     *
+     * IntelliJ needs this: it keeps each module's sources in their own session, so a @Structural interface from another
+     * module of the project is a source declaration whose types this session's scopes can't resolve. For the
+     * command line compiler the same interface is a class file and its types are read straight off it.
+     */
+    private fun FirCallableSymbol<*>.typeFromAnotherModule(owner: FirRegularClassSymbol): ConeKotlinType? {
+        // A class this session compiles has a file here; anything else belongs to a dependency.
+        if (session.firProvider.getFirClassifierContainerFileIfAny(owner.classId) != null) return null
+        return runCatching { resolvedReturnType }.getOrNull()?.takeUnless { it is ConeErrorType }
+    }
 
     override fun superTypes(symbol: FirRegularClassSymbol): List<ConeKotlinType> =
         if (symbol.origin == FirDeclarationOrigin.Source) symbol.fir.superTypeRefs.mapNotNull { resolve(it, symbol) }
         else runCatching { symbol.resolvedSuperTypes }.getOrDefault(emptyList())
-
-    private val FirCallableDeclaration.isFromSource: Boolean get() = origin == FirDeclarationOrigin.Source
-
-    private fun FirCallableSymbol<*>.typeOrNull(): ConeKotlinType? =
-        runCatching { resolvedReturnType }.getOrNull()?.takeUnless { it is ConeErrorType }
 
     private fun resolve(typeRef: FirTypeRef, owner: FirRegularClassSymbol): ConeKotlinType? {
         val type = when {

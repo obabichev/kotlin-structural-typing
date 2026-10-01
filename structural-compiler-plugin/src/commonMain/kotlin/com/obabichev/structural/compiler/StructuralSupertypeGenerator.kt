@@ -46,13 +46,6 @@ class StructuralSupertypeGenerator(
             .map { it.classId.constructClassLikeType(emptyArray(), isMarkedNullable = false) }
 
 
-        StructuralDebug.note(
-            "computeAdditional ${klass.name} existing=$existing known=${structuralInterfaces.map { it.classId }} " +
-                "returning=${added.map { it.classId }} " +
-                structuralInterfaces.filter { it.classId !in existing }.joinToString(" ") { iface ->
-                    "${iface.classId}->${session.explain(members, iface, types).map { it.render() }}"
-                },
-        )
 
         if (klass.classKind == ClassKind.ENUM_CLASS && added.isNotEmpty()) {
             // The command-line compiler only writes computed supertypes back to classes that started with an unresolved

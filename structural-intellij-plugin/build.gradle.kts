@@ -1,4 +1,5 @@
 import org.jetbrains.intellij.platform.gradle.tasks.PrepareSandboxTask
+import java.io.File
 
 plugins {
     alias(libs.plugins.kotlin.jvm)
@@ -87,9 +88,22 @@ tasks.named<PrepareSandboxTask>("prepareSandbox") {
     }
 }
 
+/** A compiled module publishing a @Structural interface, for the test that matches one across a module boundary. */
+val fixtureLibrary: Configuration by configurations.creating
+
+dependencies {
+    fixtureLibrary(project(":sample-library"))
+}
+
 tasks.test {
     useJUnitPlatform()
-    // The highlighting test loads the compiler plugin the way a Gradle project does: from a jar.
-    systemProperty("structural.compilerPluginJar", ideCompilerPluginJar.get().archiveFile.get().asFile.absolutePath)
-    dependsOn(ideCompilerPluginJar)
+    // The platform caches one light project per descriptor and reuses it across classes, so a class that configures
+    // the project differently would otherwise change what its neighbours analyze.
+    forkEvery = 1
+    dependsOn(ideCompilerPluginJar, fixtureLibrary)
+    doFirst {
+        // The highlighting test loads the compiler plugin the way a Gradle project does: from a jar.
+        systemProperty("structural.compilerPluginJar", ideCompilerPluginJar.get().archiveFile.get().asFile.absolutePath)
+        systemProperty("structural.fixtureLibrary", fixtureLibrary.files.joinToString(File.pathSeparator))
+    }
 }

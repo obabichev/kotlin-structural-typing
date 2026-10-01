@@ -15,15 +15,12 @@ import java.nio.file.Path
  */
 class StructuralCompilerPluginProvider : KotlinBundledFirCompilerPluginProvider {
     override fun provideBundledPluginJar(project: Project, userSuppliedPluginJar: Path): Path? {
-        val recognized = StructuralCompilerPluginJar.isStructuralCompilerPlugin(userSuppliedPluginJar)
-        IdeDebug.note("asked about $userSuppliedPluginJar recognized=$recognized")
-        if (!recognized) return null
+        if (!StructuralCompilerPluginJar.isStructuralCompilerPlugin(userSuppliedPluginJar)) return null
         val bundled = PluginManagerCore.getPlugin(PluginId.getId(PLUGIN_ID))
             ?.pluginPath
             ?.resolve("compiler-plugin/structural-compiler-plugin.jar")
             ?.takeIf { Files.isRegularFile(it) }
         if (bundled == null) LOG.warn("Structural compiler plugin jar is missing from the $PLUGIN_ID plugin distribution")
-        IdeDebug.note("substituting $bundled")
         return bundled
     }
 

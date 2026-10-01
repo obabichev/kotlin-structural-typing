@@ -125,8 +125,6 @@ internal class NearMissChecker(private val index: StructuralIndex) :
         val supertypes = index.supertypesOf(declaration.symbol)
         val members = index.membersOf(declaration.symbol)
 
-        StructuralDebug.note("checker ${declaration.name} supertypesNow=$supertypes")
-
         for (iface in index.interfaces) {
             if (iface.classId in supertypes) continue
             val reasons = session.explain(members, iface, types)
