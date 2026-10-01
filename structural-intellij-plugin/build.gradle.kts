@@ -26,8 +26,11 @@ dependencies {
         val localIde = providers.gradleProperty("structural.ideaPath")
         if (localIde.isPresent) local(localIde) else intellijIdea("2026.2")
         bundledPlugin("org.jetbrains.kotlin")
+        testFramework(org.jetbrains.intellij.platform.gradle.TestFrameworkType.Platform)
     }
     testImplementation(kotlin("test"))
+    // The platform's test fixtures are JUnit 3 based.
+    testImplementation("junit:junit:4.13.2")
 }
 
 // The IDE provides the Kotlin standard library.
@@ -50,6 +53,11 @@ tasks.named<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>("compileIdeCompiler
     exclude("**/StructuralComponentRegistrar.kt")
     exclude("**/StructuralCommandLineProcessor.kt")
     exclude("**/SourceElements.kt")
+}
+
+// The highlighting test registers the compiler plugin's own extensions with the IDE's analysis.
+dependencies {
+    testImplementation(ideCompilerPlugin.output)
 }
 
 val ideCompilerPluginJar = tasks.register<Jar>("ideCompilerPluginJar") {
@@ -81,4 +89,7 @@ tasks.named<PrepareSandboxTask>("prepareSandbox") {
 
 tasks.test {
     useJUnitPlatform()
+    // The highlighting test loads the compiler plugin the way a Gradle project does: from a jar.
+    systemProperty("structural.compilerPluginJar", ideCompilerPluginJar.get().archiveFile.get().asFile.absolutePath)
+    dependsOn(ideCompilerPluginJar)
 }

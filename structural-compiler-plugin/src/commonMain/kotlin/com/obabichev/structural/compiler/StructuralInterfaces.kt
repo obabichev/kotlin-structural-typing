@@ -126,11 +126,13 @@ private fun isAbstract(declaration: FirCallableDeclaration): Boolean {
 }
 
 /**
- * Direct properties and functions of [symbol]. Members of Java classes come from the class's member scope, which has
- * their types converted to Kotlin; the Java declarations themselves are only converted lazily.
+ * Direct properties and functions of [symbol]. Anything not written in the module being compiled -- a Java class, or an
+ * interface published by a dependency -- comes from the class's member scope, which hands out members with their types
+ * already known. Their declarations are only filled in on demand, and when IntelliJ analyzes code that demand can't be
+ * met while supertypes are being decided, so reading the declarations directly finds no types and nothing matches.
  */
 private fun FirSession.declaredMembers(symbol: FirRegularClassSymbol): List<FirCallableDeclaration> {
-    if (symbol.fir.origin !is FirDeclarationOrigin.Java) {
+    if (symbol.fir.origin == FirDeclarationOrigin.Source) {
         return symbol.fir.declarations.filter { it is FirProperty || it is FirNamedFunction }.map { it as FirCallableDeclaration }
     }
     val scope = symbol.unsubstitutedScope(this, ScopeSession(), withForcedTypeCalculator = false, memberRequiredPhase = null)
