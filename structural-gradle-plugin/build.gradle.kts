@@ -9,6 +9,15 @@ kotlin {
 
 dependencies {
     compileOnly(libs.kotlin.gradle.plugin.api)
+    testImplementation(libs.kotlin.gradle.plugin.api)
+    testImplementation(kotlin("test"))
+}
+
+tasks.test {
+    useJUnitPlatform()
+    // So a test can check the generated coordinates against the version actually being built.
+    systemProperty("structural.expectedGroup", project.group.toString())
+    systemProperty("structural.expectedVersion", project.version.toString())
 }
 
 // The plugin refers to the published artifacts, so it needs their coordinates.
