@@ -32,6 +32,14 @@ class StructuralCompilerPluginJarTest {
     }
 
     @Test
+    fun `recognizes the entry point the DevKit generates`() {
+        // One artifact carries a copy per Kotlin version, loaded through a generated wrapper rather than the registrar
+        // itself, so the name in the service file is not the one this plugin declares.
+        val generated = "com.obabichev.structural.PluginInfo\u0024REGISTRAR_CLASS\u00241\u0024Plugin"
+        assertTrue(StructuralCompilerPluginJar.isStructuralCompilerPlugin(jar(serviceFile to generated)))
+    }
+
+    @Test
     fun `ignores other compiler plugins`() {
         assertFalse(StructuralCompilerPluginJar.isStructuralCompilerPlugin(jar(serviceFile to "org.jetbrains.kotlin.compose.Registrar")))
         assertFalse(StructuralCompilerPluginJar.isStructuralCompilerPlugin(jar("other.txt" to "x")))

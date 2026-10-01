@@ -7,6 +7,12 @@ import java.util.zip.ZipFile
 /** Recognizes the structural compiler plugin among the compiler plugins configured in a project's build. */
 object StructuralCompilerPluginJar {
     const val REGISTRAR = "com.obabichev.structural.compiler.StructuralPluginRegistrar"
+
+    /**
+     * The registrar named in the service file belongs to the plugin when it is in the plugin's package: the DevKit
+     * wraps the real one in an entry point it generates per Kotlin version, so the name is not fixed.
+     */
+    private const val REGISTRAR_PACKAGE = "com.obabichev.structural."
     private const val SERVICE_FILE = "META-INF/services/org.jetbrains.kotlin.compiler.plugin.CompilerPluginRegistrar"
     private const val JAR_NAME_PREFIX = "structural-compiler-plugin"
 
@@ -20,7 +26,7 @@ object StructuralCompilerPluginJar {
             Files.isRegularFile(path) -> readJarEntry(path, SERVICE_FILE)
             else -> return path.fileName?.toString()?.let { it.startsWith(JAR_NAME_PREFIX) && it.endsWith(".jar") } == true
         }
-        return services != null && services.lineSequence().any { it.trim() == REGISTRAR }
+        return services != null && services.lineSequence().any { it.trim().startsWith(REGISTRAR_PACKAGE) }
     }
 
     private fun readJarEntry(jar: Path, name: String): String? = try {
