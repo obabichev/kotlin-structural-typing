@@ -33,7 +33,7 @@ repositories:
 ```kotlin
 plugins {
     kotlin("jvm") version "2.4.20"
-    id("com.obabichev.structural") version "0.2.0-kotlin-2.4"
+    id("com.obabichev.structural") version "0.3.0-kotlin-2.4"
 }
 ```
 
