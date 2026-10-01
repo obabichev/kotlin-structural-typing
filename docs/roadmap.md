@@ -59,10 +59,8 @@ Every matching class in the module implements the interface. Consider:
 - **Dropping the IDE plugin:** the Kotlin team is working on having the IDE load supported third-party compiler plugins
   automatically. Once that ships, `structural-intellij-plugin` can go, and the registry key
   `kotlin.k2.only.bundled.compiler.plugins.enabled` stops being the fallback.
-- **Automated IDE test:** run the plugin through IntelliJ's compiler (the Analysis API) in tests. The command-line
-  compiler and IntelliJ apply supertypes differently, which already caused an enum bug only visible in the IDE.
 - **CI:** build against new Kotlin versions early; the plugin uses internal compiler APIs.
-- **Kotlin compiler plugin DevKit:** the `devkit-migration` branch builds the plugin against several compiler versions,
-  including the ones IntelliJ analyzes with, and adds the compiler test framework with IDE-mode tests. It would replace
-  the single-Kotlin-version limitation and the manual IDE testing. See [`devkit-spike.md`](devkit-spike.md) for what
-  works and what is left.
+- **A DevKit that knows released Kotlin versions:** the pinned EAP build predates Kotlin 2.4.20, which is why
+  `includeBetaAndRc=LATEST` is needed; see [`known-issues.md`](known-issues.md). Drop it when a newer DevKit ships.
+- **Testing that the IDE loads the plugin:** the editor's analysis is tested, but the substitution that gets our
+  compiler plugin in front of it is still checked by hand.

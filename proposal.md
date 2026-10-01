@@ -58,8 +58,8 @@ dependencies {
 }
 ```
 
-Requires Kotlin 2.4.20 with the K2 compiler. A published version would ship a Gradle plugin instead of the classpath
-dependency.
+Requires Kotlin 2.4.x with the K2 compiler; one published artifact covers 2.4.0, 2.4.10 and 2.4.20. The published
+Gradle plugin applies both for a module and names the interfaces its dependencies publish.
 
 **IDE.** IntelliJ's K2 mode only runs compiler plugins bundled with the IDE, so without help the editor shows
 `Argument type mismatch` errors that the build doesn't have. The `Structural Typing` IntelliJ plugin
@@ -73,7 +73,8 @@ the IDE plugin in `.idea/externalDependencies.xml`, so IntelliJ suggests install
 | Module | Contents |
 |---|---|
 | `structural-annotations` | `@Structural` (`@Target(CLASS)`, `@Retention(BINARY)`) |
-| `structural-compiler-plugin` | The K2 compiler plugin, registered through `META-INF/services` |
+| `structural-compiler-plugin` | The K2 compiler plugin, built against every supported Kotlin version (see [`docs/multiple-kotlin-versions.md`](docs/multiple-kotlin-versions.md)) |
+| `structural-compiler-plugin-tests` | Its tests, which need the plugin and one compiler on a classpath |
 | `structural-intellij-plugin` | IntelliJ plugin (ID `com.obabichev.structural.ide`, IntelliJ 2026.2) that makes the IDE run the compiler plugin |
 | `sample` | A Gradle module using the plugin; its tests are the end-to-end check |
 | `sample-library` | A module publishing a `@Structural` interface that `sample` matches from its own classes |
@@ -231,7 +232,7 @@ have to be compiled together with each other.
 
 ## Testing
 
-- **Plugin tests** (`structural-compiler-plugin`) compile snippets with the plugin using kotlin-compile-testing
+- **Plugin tests** (`structural-compiler-plugin-tests`) compile snippets with the plugin using kotlin-compile-testing
   (`dev.zacsweers.kctfork:core`) and run the result. One file per feature, each starting with a short description:
   - `BasicUsageTest`: what implementing by shape gives (identity, `is` checks, collections, any function shape)
   - `PropertiesTest`: property requirements
@@ -247,8 +248,12 @@ have to be compiled together with each other.
 - **`sample`**: a real Gradle build using the plugin through `kotlinCompilerPluginClasspath`, with one test file per
   user-facing feature (`BasicUsageTest`, `CallSitesTest`, `PropertiesTest`, `InheritanceTest`, `EnumClassesTest`,
   `FunctionsAndSuperinterfacesTest`, `OtherModulesTest` against `:sample-library`).
-- **`structural-intellij-plugin`**: unit tests for recognizing the compiler plugin jar, and `verifyPluginStructure`.
-  Whether the IDE actually loads the plugin is checked manually in IntelliJ.
+- **`structural-intellij-plugin`**: unit tests for recognizing the compiler plugin jar, `verifyPluginStructure`, and
+  `StructuralHighlightingTest` / `StructuralCrossModuleHighlightingTest`, which analyze code through the Kotlin plugin
+  running in a test IDE and assert the errors the editor would show. The editor resolves declarations on demand rather
+  than phase by phase, and every bug this plugin had in the editor was invisible to the tests above. Whether a running
+  IDE loads the plugin at all is still checked by hand.
+- **`structural-gradle-plugin`**: reading the index a dependency publishes, and the coordinates it hands the compiler.
 
 ## Success criteria for the PoC
 

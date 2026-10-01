@@ -9,8 +9,12 @@ Three artifacts are published to Maven Central under `com.obabichev.structural`,
 | `structural-compiler-plugin` | The K2 compiler plugin |
 | `structural-gradle-plugin` | The Gradle plugin, applied as `com.obabichev.structural` |
 
-The version names the Kotlin version it works with, e.g. `0.2.0-kotlin-2.4`, because the compiler plugin uses
-internal compiler APIs. Bump the Kotlin part when moving to a new Kotlin release; see `build.gradle.kts`.
+The version names the Kotlin line it works with, e.g. `0.3.0-kotlin-2.4`, because the compiler plugin uses internal
+compiler APIs. Bump the Kotlin part when moving to a new Kotlin release; see `build.gradle.kts`.
+
+`structural-compiler-plugin` publishes an umbrella artifact carrying a copy of the plugin per Kotlin version, plus a
+module per version group that the umbrella's Gradle metadata points at. Users depend on the one coordinate and the
+right copy is loaded for their compiler; see [`multiple-kotlin-versions.md`](multiple-kotlin-versions.md).
 
 The IntelliJ plugin is not on Maven Central. Its zip is attached to the matching
 [GitHub release](https://github.com/obabichev/kotlin-structural-typing/releases), built with
@@ -89,6 +93,10 @@ nothing but the version change, and carries the tag.
    ```
    Every jar and pom needs an `.asc` next to it, and `gpg --verify <file>.asc <file>` should say "Good signature";
    Central rejects a deployment without them.
+
+   Then check a consumer actually resolves them: a project outside this repository with `mavenLocal()` first, applying
+   the plugin at the version just published. Do it on the oldest supported Kotlin version as well as the newest, with
+   an enum class among the matching classes -- that combination is what release 0.2.0 got wrong.
 2. **The release commit:** drop `-SNAPSHOT` from the version in `build.gradle.kts`, update the version in `README.md`
    and this file if it is mentioned there, and commit it on its own:
    ```bash

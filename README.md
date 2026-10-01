@@ -25,8 +25,10 @@ plugins {
 }
 ```
 
-Kotlin **2.4.x** is required (tested with 2.4.0, 2.4.10 and 2.4.20): the compiler plugin uses internal compiler APIs,
-which is why the version names the Kotlin line it works with. On other versions the build fails with a clear message.
+Kotlin **2.4.x** is required: the compiler plugin uses internal compiler APIs, which is why the version names the
+Kotlin line it works with. On other versions the build fails with a clear message. The plugin is compiled against every
+version of that line it supports, so one artifact covers 2.4.0, 2.4.10 and 2.4.20 (release `0.2.0` only works on
+2.4.20; see [`docs/known-issues.md`](docs/known-issues.md)).
 
 **2. Mark an interface and use any matching class:**
 
@@ -67,8 +69,9 @@ fun main() {
 ```
 
 Nothing is written on the classes: no annotations, no wrappers, no generated code. Member types have to be declared
-explicitly, and the classes matching an interface must be compiled in the same module as each other; the interface
-itself can come from another module compiled with the plugin.
+explicitly, and the classes matching an interface must be compiled in the same module as each other. The interface
+itself can live in another module, as long as that module is also built with the plugin: it publishes the interfaces it
+declares, and modules depending on it match their own classes against them.
 
 **3. For IntelliJ,** install the IDE plugin, otherwise the editor reports `Argument type mismatch` errors that the build
 doesn't have: download the zip from the
@@ -103,9 +106,10 @@ signature. [`proposal.md`](proposal.md) has the exact rules.
 | Module | Contents |
 |---|---|
 | `structural-annotations` | The `@Structural` annotation |
-| `structural-compiler-plugin` | The K2 compiler plugin |
+| `structural-compiler-plugin` | The K2 compiler plugin, built against every supported Kotlin version |
+| `structural-compiler-plugin-tests` | Its tests: they compile snippets with the plugin and run the result |
 | `structural-gradle-plugin` | Gradle plugin that applies both to a module |
-| `structural-intellij-plugin` | IntelliJ plugin so the IDE analyzes code the same way as the build |
+| `structural-intellij-plugin` | IntelliJ plugin so the IDE analyzes code the same way as the build, and the tests that check it does |
 | `sample` | A Gradle module using the plugin; its tests show every supported case |
 | `sample-library` | A module publishing a `@Structural` interface that `sample` matches from its own classes |
 
@@ -115,14 +119,22 @@ signature. [`proposal.md`](proposal.md) has the exact rules.
 | [`docs/known-issues.md`](docs/known-issues.md) | Current limitations, with what has been verified |
 | [`docs/roadmap.md`](docs/roadmap.md) | Planned work, starting with generics |
 | [`docs/publishing.md`](docs/publishing.md) | How the artifacts are published |
-| [`docs/devkit-spike.md`](docs/devkit-spike.md) | Experiment with the Kotlin compiler plugin DevKit, for multi-version support |
+| [`docs/multiple-kotlin-versions.md`](docs/multiple-kotlin-versions.md) | How one artifact supports every Kotlin version in the line |
 
 ## Working on this repository
 
 Gradle needs JDK 17:
 
 ```bash
-JAVA_HOME=$(/usr/libexec/java_home -v 17) ./gradlew :structural-compiler-plugin:test :sample:test
+JAVA_HOME=$(/usr/libexec/java_home -v 17) ./gradlew build
+```
+
+That compiles the plugin against each supported Kotlin version and runs every test, including the ones that analyze
+code the way IntelliJ does:
+
+```bash
+JAVA_HOME=$(/usr/libexec/java_home -v 17) ./gradlew :structural-intellij-plugin:test \
+    "-Pstructural.ideaPath=/path/to/IntelliJ IDEA.app"
 ```
 
 The sample's tests are the best place to see what works: one file per feature under
@@ -151,7 +163,7 @@ Without `-Pstructural.ideaPath`, Gradle downloads IntelliJ IDEA 2026.2 to build 
 
 ## Status
 
-A proof of concept: 78 tests cover the supported cases, and the whole build passes without compiler warnings. It is
+A proof of concept: 100 tests cover the supported cases, and the whole build passes without compiler warnings. It is
 published for trying out, not for production use. The main limitations:
 
 - generic interfaces and generic members are ignored ([roadmap](docs/roadmap.md))
@@ -159,6 +171,7 @@ published for trying out, not for production use. The main limitations:
   together; other modules can then use those classes through the interface
 - member types must be explicit
 - the plugin uses internal, experimental compiler APIs, so expect breakage on Kotlin updates
+- building it needs an EAP release of the Kotlin compiler plugin DevKit ([`docs/known-issues.md`](docs/known-issues.md))
 
 The first version of this proof of concept generated overloads and adapters with KSP. KSP can't see call sites or change
 existing classes, so it produced a lot of code and still couldn't support `is` checks, identity or collections; the

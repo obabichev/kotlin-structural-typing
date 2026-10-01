@@ -28,10 +28,10 @@ always accompanies the compiler's own `Argument type mismatch`.
 ### 2. Interfaces from a dependency need that dependency compiled with the plugin (verified)
 
 A module compiled with the plugin publishes its `@Structural` interfaces in `META-INF/structural/interfaces.txt`, and a
-module compiling against it implements them by shape. A dependency that only uses the `@Structural` annotation without
-applying the plugin publishes no index, so its interfaces are invisible: the compiler can load an interface by name and
-list the classifiers of a package it is told about, but `getPackageNames()` returns null, so the classpath can't be
-searched.
+module compiling against it implements them by shape, in the build and in the editor. A dependency that only uses the
+`@Structural` annotation without applying the plugin publishes no index, so its interfaces are invisible: the compiler
+can load an interface by name and list the classifiers of a package it is told about, but `getPackageNames()` returns
+null, so the classpath can't be searched.
 
 The index is read in two ways: the Gradle plugin passes what it finds as compiler options, and failing that the
 compiler plugin reads the indexes off the classpath itself. IntelliJ only gets the first, from the Gradle import, so a
@@ -93,8 +93,8 @@ Remaining limits:
 - Users install the IntelliJ plugin once, from the
   [GitHub release](https://github.com/obabichev/kotlin-structural-typing/releases); it is not on the JetBrains
   Marketplace.
-- Loading in a running IDE is checked by hand; there is no automated IDE test yet (the DevKit would provide one, see
-  the roadmap).
+- Loading in a running IDE -- the plugin substitution itself -- is still checked by hand. What the editor then reports
+  is tested: `structural-intellij-plugin` analyzes code through the Kotlin plugin running in a test IDE.
 - The project must be trusted in IntelliJ; untrusted projects don't run any compiler plugins.
 
 ## Plugin implementation
@@ -102,7 +102,19 @@ Remaining limits:
 ### 9. Internal and experimental compiler APIs
 
 The plugin uses the experimental compiler plugin API and opts into internal FIR APIs (`SymbolInternals`,
-`DirectDeclarationsAccess`). Expect breakage on every Kotlin update; the plugin is built and tested for 2.4.20 only.
+`DirectDeclarationsAccess`). Expect breakage on every Kotlin update. It is compiled against every 2.4 version it
+supports (2.4.0, 2.4.10 and the 2.4.20 line), which is what caught `KtFakeSourceElementKind.PluginGenerated.Default`
+not existing before 2.4.20 -- release 0.2.0 fails with `NoClassDefFoundError` on 2.4.0 and 2.4.10 as soon as an enum
+class matches an interface, although its notes claim those versions work.
+
+### 9a. The DevKit used to build it predates Kotlin 2.4.20
+
+The compiler plugin DevKit build this repository pins (`0.0.3-dev-66e2b55`, from an EAP repository) knows the 2.4.20
+line only through its beta, RC, dev and IDE builds, so nothing covers the released 2.4.20 unless
+`kotlin.compiler.plugin.devkit.includeBetaAndRc=LATEST` is set: without it a build on 2.4.20 resolves the 2.4.10
+variant and fails with `NoSuchFieldError`. With it, 2.4.20 gets the variant compiled against 2.4.20-RC, which is
+verified by the tests and the sample but rests on the RC and the release being compatible. Drop the setting once a
+DevKit that knows the release ships.
 
 ### 10. Incremental compilation checked only on a small module
 
@@ -132,8 +144,13 @@ rather than phase by phase, and applies supertypes differently. Two bugs appeare
   `'name' hides member of supertype 'Named' and needs an 'override' modifier`. Types are now read through symbols,
   which makes IntelliJ resolve them on demand.
 
-Both fixes follow the IDE's own code but are only confirmed by hand in IntelliJ; no automated test runs its compiler
-(see the roadmap). Expect further differences of this kind.
+A third appeared with interfaces from other modules: IntelliJ keeps each module's sources in its own session, so an
+interface in a sibling module is a source declaration whose type references this session's scopes cannot resolve, and
+every requirement failed as unknown while the build was green. Types of declarations the session has no file for are
+now read through their symbols.
+
+All three are covered by `StructuralHighlightingTest` and `StructuralCrossModuleHighlightingTest`, which analyze code
+through the Kotlin plugin in a test IDE. Expect further differences of this kind; that is where to catch them.
 
 ## Development notes
 
