@@ -115,6 +115,7 @@ signature. [`proposal.md`](proposal.md) has the exact rules.
 
 | Document | Contents |
 |---|---|
+| [`CHANGELOG.md`](CHANGELOG.md) | What changed in each version |
 | [`proposal.md`](proposal.md) | Design, matching rules, testing, project history |
 | [`docs/known-issues.md`](docs/known-issues.md) | Current limitations, with what has been verified |
 | [`docs/roadmap.md`](docs/roadmap.md) | Planned work, starting with generics |

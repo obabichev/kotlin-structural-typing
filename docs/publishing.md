@@ -97,8 +97,9 @@ nothing but the version change, and carries the tag.
    Then check a consumer actually resolves them: a project outside this repository with `mavenLocal()` first, applying
    the plugin at the version just published. Do it on the oldest supported Kotlin version as well as the newest, with
    an enum class among the matching classes -- that combination is what release 0.2.0 got wrong.
-2. **The release commit:** drop `-SNAPSHOT` from the version in `build.gradle.kts`, update the version in `README.md`
-   and this file if it is mentioned there, and commit it on its own:
+2. **The release commit:** drop `-SNAPSHOT` from the version in `build.gradle.kts`, move the unreleased section of
+   `CHANGELOG.md` under the new version with today's date, update the version in `README.md` and this file if it is
+   mentioned there, and commit it on its own:
    ```bash
    git commit -am "Release <version>"
    git tag -a "release/<version>" -m "Release <version>"
