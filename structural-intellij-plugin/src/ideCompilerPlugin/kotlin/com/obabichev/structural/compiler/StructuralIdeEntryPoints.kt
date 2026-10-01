@@ -18,8 +18,15 @@ class StructuralPluginRegistrar : CompilerPluginRegistrar() {
     override val pluginId: String = "com.obabichev.structural"
     override val supportsK2: Boolean = true
 
-    override fun ExtensionStorage.registerExtensions(configuration: CompilerConfiguration) =
+    override fun ExtensionStorage.registerExtensions(configuration: CompilerConfiguration) {
+        // TEMPORARY, together with IdeDebug: shows what the IDE hands the plugin.
+        runCatching {
+            java.io.File("/tmp/structural-debug.log").appendText(
+                "${System.currentTimeMillis()} plugin: options=${configuration.getList(IMPORTED_INTERFACES)}\n",
+            )
+        }
         registerStructuralExtensions(configuration)
+    }
 }
 
 class StructuralCommandLineProcessor : CommandLineProcessor {

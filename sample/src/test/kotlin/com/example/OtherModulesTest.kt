@@ -1,5 +1,7 @@
 package com.example
 
+import com.example.photos.Paper
+import com.example.photos.Photo
 import com.example.shapes.Sized
 import com.example.shapes.area
 import com.example.shapes.total
@@ -12,11 +14,8 @@ import kotlin.test.assertTrue
  * implement it by shape without knowing about it.
  */
 class OtherModulesTest {
-    class Photo(val width: Int, val height: Int)
-
-    enum class Paper(val width: Int, val height: Int) {
-        A4(210, 297),
-    }
+    /** The same shape, declared inside this test class rather than in the module's main sources. */
+    class NestedPhoto(val width: Int, val height: Int)
 
     @Test
     fun `a class implements an interface declared in another module`() {
@@ -32,5 +31,10 @@ class OtherModulesTest {
     @Test
     fun `classes of both modules mix in one collection`() {
         assertEquals(62376, total(listOf(Photo(2, 3), Paper.A4)))
+    }
+
+    @Test
+    fun `a nested class implements it too`() {
+        assertEquals(6, area(NestedPhoto(2, 3)))
     }
 }
