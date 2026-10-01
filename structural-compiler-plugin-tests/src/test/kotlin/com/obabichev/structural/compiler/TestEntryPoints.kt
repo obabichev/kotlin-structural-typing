@@ -9,9 +9,8 @@ import org.jetbrains.kotlin.config.CompilerConfiguration
 import org.jetbrains.kotlin.fakeElement
 
 /**
- * The parts of the compiler plugin that the copy handed to the IDE needs for itself. That copy is a plain JVM
- * compilation against the IDE's own Kotlin compiler, so it can't use the DevKit's command line processor or the
- * expect/actual shim; the registrar it is loaded through lives in the plugin's shared code.
+ * The parts the DevKit supplies when it builds the plugin, written plainly for these tests: they compile against one
+ * Kotlin compiler, so there is no version to choose between.
  */
 class StructuralCommandLineProcessor : CommandLineProcessor {
     override val pluginId: String = "com.obabichev.structural"
@@ -25,6 +24,5 @@ class StructuralCommandLineProcessor : CommandLineProcessor {
     }
 }
 
-/** The IDE ships a 2.4.20 compiler, so this is the post-2.4.20 form of the shim in `SourceElements.kt`. */
 internal fun KtSourceElement.pluginGenerated(): KtSourceElement =
     fakeElement(KtFakeSourceElementKind.PluginGenerated.Default)

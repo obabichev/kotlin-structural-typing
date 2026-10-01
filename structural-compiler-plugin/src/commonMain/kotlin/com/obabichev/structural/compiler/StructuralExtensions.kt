@@ -12,6 +12,18 @@ import org.jetbrains.kotlin.fir.extensions.FirExtensionRegistrarAdapter
 import org.jetbrains.kotlin.name.ClassId
 
 /**
+ * Loaded through `META-INF/services` wherever the plugin is used without the DevKit's generated entry point: by the
+ * copy the IntelliJ plugin hands to the IDE, and by the compiler plugin's own tests.
+ */
+class StructuralPluginRegistrar : CompilerPluginRegistrar() {
+    override val pluginId: String = "com.obabichev.structural"
+    override val supportsK2: Boolean = true
+
+    override fun ExtensionStorage.registerExtensions(configuration: CompilerConfiguration) =
+        registerStructuralExtensions(configuration)
+}
+
+/**
  * Everything an entry point has to do, kept apart from the entry points themselves: the DevKit generates one for each
  * Kotlin version, and the copy of the plugin the IntelliJ plugin hands to the IDE brings its own.
  */

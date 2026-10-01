@@ -23,6 +23,7 @@ rootProject.name = "kotlin-structural-typing"
 include(
     ":structural-annotations",
     ":structural-compiler-plugin",
+    ":structural-compiler-plugin-tests",
     ":structural-gradle-plugin",
     ":structural-intellij-plugin",
     ":sample",
