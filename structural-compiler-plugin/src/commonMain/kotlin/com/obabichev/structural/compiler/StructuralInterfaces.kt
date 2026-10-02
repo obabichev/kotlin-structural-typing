@@ -86,7 +86,7 @@ internal class StructuralInterfaceIndex(
     fun interfaces(): List<StructuralInterface> {
         for (symbol in session.candidateInterfaces(imported)) {
             if (symbol.classId in usable) continue
-            session.structuralInterface(symbol, types)?.let { usable[symbol.classId] = it }
+            session.structuralInterfaceOrNull(symbol, types)?.let { usable[symbol.classId] = it }
         }
         return usable.values.toList()
     }
@@ -108,23 +108,40 @@ private fun FirSession.candidateInterfaces(imported: List<ClassId>): List<FirReg
 internal fun FirSession.structuralInterfaces(
     types: TypeLookup,
     imported: List<ClassId> = emptyList(),
-): List<StructuralInterface> = candidateInterfaces(imported).mapNotNull { structuralInterface(it, types) }
+): List<StructuralInterface> = candidateInterfaces(imported).mapNotNull { structuralInterfaceOrNull(it, types) }
 
 /**
  * Collects the abstract members of [iface] and all its superinterfaces. Returns null when a class can't safely implement
  * the interface by shape: type parameters anywhere in the hierarchy, generic or extension members, or superinterfaces
  * that don't resolve. Adding such an interface could leave a class with members it doesn't implement.
  */
-internal fun FirSession.structuralInterface(iface: FirRegularClassSymbol, types: TypeLookup): StructuralInterface? {
+/**
+ * Why an interface can't be used, when it can't. [Unusable] is final -- the interface can never be added to any class,
+ * and the user is told so -- while [Undecided] only means this session hasn't resolved enough yet and the answer should
+ * be asked for again.
+ */
+internal sealed interface InterfaceResult {
+    data class Usable(val iface: StructuralInterface) : InterfaceResult
+    data class Unusable(val reason: String) : InterfaceResult
+    object Undecided : InterfaceResult
+}
+
+/** [structuralInterface] without the reason, for callers that only need the usable ones. */
+internal fun FirSession.structuralInterfaceOrNull(iface: FirRegularClassSymbol, types: TypeLookup): StructuralInterface? =
+    (structuralInterface(iface, types) as? InterfaceResult.Usable)?.iface
+
+internal fun FirSession.structuralInterface(iface: FirRegularClassSymbol, types: TypeLookup): InterfaceResult {
     val requirements = mutableListOf<Member>()
     // Members with an implementation in a more derived interface are not required from its superinterfaces.
     val implemented = mutableSetOf<String>()
     val visited = mutableSetOf<ClassId>()
 
-    fun collect(symbol: FirRegularClassSymbol, substitutor: ConeSubstitutor): Boolean {
-        if (!visited.add(symbol.classId)) return true
+    fun collect(symbol: FirRegularClassSymbol, substitutor: ConeSubstitutor): InterfaceResult? {
+        if (!visited.add(symbol.classId)) return null
         // The @Structural interface itself may not be generic: its arguments would have to be guessed per class.
-        if (symbol.classId == iface.classId && symbol.fir.typeParameters.isNotEmpty()) return false
+        if (symbol.classId == iface.classId && symbol.fir.typeParameters.isNotEmpty()) {
+            return InterfaceResult.Unusable("it has type parameters, so a class can't be told which arguments it gets")
+        }
         for (declaration in declaredMembers(symbol)) {
             val member = Member(declaration, symbol, substitutor)
             val key = member.overrideKey()
@@ -133,22 +150,36 @@ internal fun FirSession.structuralInterface(iface: FirRegularClassSymbol, types:
                 continue
             }
             if (key in implemented) continue
-            if (declaration.typeParameters.isNotEmpty() || declaration.receiverParameter != null) return false
+            if (declaration.typeParameters.isNotEmpty()) {
+                return InterfaceResult.Unusable("'${member.label}' is generic, and generic members are not matched")
+            }
+            if (declaration.receiverParameter != null) {
+                return InterfaceResult.Unusable("'${member.label}' is an extension, which a class can't implement")
+            }
             requirements += member
         }
         for (superType in types.superTypes(symbol)) {
-            val classId = superType.classId ?: return false
+            val classId = superType.classId ?: return InterfaceResult.Undecided
             if (classId == StandardClassIds.Any) continue
-            val superSymbol = symbolProvider.getClassLikeSymbolByClassId(classId) as? FirRegularClassSymbol ?: return false
-            if (superSymbol.classKind != ClassKind.INTERFACE) return false
-            val inherited = substitutorFor(superSymbol, superType, substitutor) ?: return false
-            if (!collect(superSymbol, inherited)) return false
+            val superSymbol = symbolProvider.getClassLikeSymbolByClassId(classId) as? FirRegularClassSymbol
+                ?: return InterfaceResult.Undecided
+            if (superSymbol.classKind != ClassKind.INTERFACE) {
+                return InterfaceResult.Unusable("'${classId.asFqNameString()}' is a supertype that is not an interface")
+            }
+            val inherited = substitutorFor(superSymbol, superType, substitutor)
+                ?: return InterfaceResult.Unusable(
+                    "the arguments it gives '${classId.asFqNameString()}' can't be used: a projection such as " +
+                        "`out T`, or a type parameter of its own",
+                )
+            collect(superSymbol, inherited)?.let { return it }
         }
-        return true
+        return null
     }
 
-    if (!collect(iface, ConeSubstitutor.Empty) || requirements.isEmpty()) return null
-    return StructuralInterface(iface, requirements)
+    collect(iface, ConeSubstitutor.Empty)?.let { return it }
+    // An interface that requires nothing may simply not be resolved yet, so this is not reported to the user.
+    if (requirements.isEmpty()) return InterfaceResult.Undecided
+    return InterfaceResult.Usable(StructuralInterface(iface, requirements))
 }
 
 /**

@@ -47,21 +47,24 @@ The interface may come from a dependency (see above), but the classes matching i
 Other modules can then use those classes through the interface without applying the plugin, because the interface is in
 their class files (`OtherModulesTest`).
 
-### 4. Types nested in classes can't be resolved while matching (verified)
+### 4. Some `@Structural` interfaces are ignored (verified)
 
-A requirement like `val kind: Kind` where `Kind` is nested inside the interface doesn't resolve during supertype
-resolution (only file-level imports are used), so no class matches it. It compiles, but silently doesn't match.
-See the roadmap.
-
-### 5. Some `@Structural` interfaces are ignored (verified)
-
-An interface with type parameters of its own, with generic or extension members, or with a superinterface that doesn't
-resolve is never added to a class: adding it could leave the class with members it doesn't implement. A generic
+An interface with type parameters of its own, with generic or extension members, or with such a member inherited from a
+superinterface, is never added to a class: adding it could leave the class with members it doesn't implement. A generic
 *superinterface* is supported, as long as the @Structural interface says what its arguments are -- `Ranked :
-Comparable<String>` then requires `compareTo(String)`. No diagnostic is reported for the cases that are refused;
-inferring a generic interface's own arguments is on the roadmap.
+Comparable<String>` then requires `compareTo(String)`.
 
-### 6. Matching changes existing code's behavior
+The interface itself is warned about, so the cause is visible where it can be fixed rather than only where a class
+fails to match:
+
+```
+w: @Structural interface 'Box' is ignored, so no class will implement it: it has type parameters, so a class can't be
+   told which arguments it gets.
+```
+
+Inferring a generic interface's own arguments is on the roadmap.
+
+### 5. Matching changes existing code's behavior
 
 Every matching class in the module really implements the interface, including classes never meant to:
 
@@ -71,12 +74,12 @@ Every matching class in the module really implements the interface, including cl
 - A class matching two interfaces used by overloads (`f(Sized)`, `f(Named)`) makes `f(obj)` ambiguous, the same as if
   both were declared.
 
-### 7. Shape changes are binary changes
+### 6. Shape changes are binary changes
 
 Adding, removing or retyping a property can add or remove an interface from a public class's bytecode, without any
 change to the class declaration. Binary-compatibility checks will see it.
 
-### 8. The IDE needs the Structural Typing IntelliJ plugin
+### 7. The IDE needs the Structural Typing IntelliJ plugin
 
 IntelliJ's K2 mode only runs compiler plugins bundled with the IDE, so without help the editor shows
 `Argument type mismatch: actual type is 'Rectangular', but 'Sized' was expected.` while the Gradle build succeeds
@@ -101,7 +104,7 @@ Remaining limits:
 
 ## Plugin implementation
 
-### 9. Internal and experimental compiler APIs
+### 8. Internal and experimental compiler APIs
 
 The plugin uses the experimental compiler plugin API and opts into internal FIR APIs (`SymbolInternals`,
 `DirectDeclarationsAccess`). Expect breakage on every Kotlin update. It is compiled against every 2.4 version it
@@ -109,7 +112,7 @@ supports (2.4.0, 2.4.10 and the 2.4.20 line), which is what caught `KtFakeSource
 not existing before 2.4.20 -- release 0.2.0 fails with `NoClassDefFoundError` on 2.4.0 and 2.4.10 as soon as an enum
 class matches an interface, although its notes claim those versions work.
 
-### 9a. The DevKit used to build it predates Kotlin 2.4.20
+### 9. The DevKit used to build it predates Kotlin 2.4.20
 
 The compiler plugin DevKit build this repository pins (`0.0.3-dev-66e2b55`, from an EAP repository) knows the 2.4.20
 line only through its beta, RC, dev and IDE builds, so nothing covers the released 2.4.20 unless

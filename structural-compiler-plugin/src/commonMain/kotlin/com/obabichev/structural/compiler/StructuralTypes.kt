@@ -6,6 +6,7 @@ import org.jetbrains.kotlin.fir.FirSession
 import org.jetbrains.kotlin.fir.declarations.FirCallableDeclaration
 import org.jetbrains.kotlin.fir.declarations.FirDeclarationOrigin
 import org.jetbrains.kotlin.fir.declarations.FirClass
+import org.jetbrains.kotlin.fir.declarations.FirRegularClass
 import org.jetbrains.kotlin.fir.declarations.FirTypeAlias
 import org.jetbrains.kotlin.fir.declarations.FirValueParameter
 import org.jetbrains.kotlin.fir.extensions.FirSupertypeGenerationExtension
@@ -253,12 +254,36 @@ internal class FileScopes(private val session: FirSession) {
         ).type
     }
 
+    /**
+     * The file's imports, plus the classifiers nested in the declaring class and its own containers: a requirement
+     * written `val kind: Kind` inside `interface Shape` means `Shape.Kind`, which no import mentions. Nested scopes come
+     * first, innermost first, as they do when the compiler resolves the class itself.
+     */
     private fun configurationFor(owner: FirRegularClassSymbol): TypeResolutionConfiguration? {
         val file = session.firProvider.getFirClassifierContainerFileIfAny(owner.classId) ?: return null
-        val scopes = createImportingScopes(file, session, scopeSession).asReversed()
-        return TypeResolutionConfiguration(scopes, listOf(owner.fir), file)
+        val containers = owner.containingClasses()
+        val nested = containers.mapNotNull { klass ->
+            runCatching { klass.scopeProvider.getNestedClassifierScope(klass, session, scopeSession) }.getOrNull()
+        }
+        val scopes = nested + createImportingScopes(file, session, scopeSession).asReversed()
+        return TypeResolutionConfiguration(scopes, containers, file)
+    }
+
+    /** [this] and the classes it is nested in, innermost first. */
+    private fun FirRegularClassSymbol.containingClasses(): List<FirRegularClass> {
+        val classes = mutableListOf<FirRegularClass>()
+        var current: FirRegularClassSymbol? = this
+        while (current != null && classes.size < MAX_NESTING) {
+            classes += current.fir
+            val outer = current.classId.outerClassId ?: break
+            current = session.symbolProvider.getClassLikeSymbolByClassId(outer) as? FirRegularClassSymbol
+        }
+        return classes
     }
 }
+
+/** A class nested deeper than this is not worth walking; the limit only guards against a cycle in class ids. */
+private const val MAX_NESTING = 16
 
 /** Supplies only supertypes that are already resolved, so resolving a type never triggers supertype computation. */
 private object ResolvedSupertypesOnly : SupertypeSupplier() {

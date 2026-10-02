@@ -1,5 +1,6 @@
 package com.example
 
+import com.example.readme.Shape
 import com.example.readme.examples
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -8,6 +9,6 @@ import kotlin.test.assertEquals
 class ReadmeExamplesTest {
     @Test
     fun `every example in the README works`() {
-        assertEquals(listOf<Any>(6, 62370, 1, "pen=#pen", 13, 2, 6, 2, true, false), examples())
+        assertEquals(listOf<Any>(6, 62370, 1, "pen=#pen", 13, 2, 6, 2, true, false, Shape.Kind.ROUND), examples())
     }
 }

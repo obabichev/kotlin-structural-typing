@@ -16,6 +16,9 @@ import org.jetbrains.kotlin.psi.KtElement
 object StructuralDiagnostics : KtDiagnosticsContainer() {
     val INFERRED_MEMBER_TYPES by warning1<KtElement, String>(SourceElementPositioningStrategies.DECLARATION_NAME)
 
+    /** On a @Structural interface that can never be added to a class; reported on its name. */
+    val UNUSABLE_INTERFACE by warning1<KtElement, String>(SourceElementPositioningStrategies.DECLARATION_NAME)
+
     /** On a class that misses an interface by a detail; reported on its name. */
     val NEAR_MISS by warning1<KtElement, String>(SourceElementPositioningStrategies.DECLARATION_NAME)
 
@@ -31,6 +34,7 @@ object StructuralDiagnostics : KtDiagnosticsContainer() {
     private object Renderers : BaseDiagnosticRendererFactory() {
         override val MAP by KtDiagnosticFactoryToRendererMap("Structural") {
             it.put(INFERRED_MEMBER_TYPES, "{0}", CommonRenderers.STRING)
+            it.put(UNUSABLE_INTERFACE, "{0}", CommonRenderers.STRING)
             it.put(NEAR_MISS, "{0}", CommonRenderers.STRING)
             it.put(ARGUMENT_NEAR_MISS, "{0}", CommonRenderers.STRING)
         }

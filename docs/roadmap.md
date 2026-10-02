@@ -27,17 +27,6 @@ What is left:
   needs variance-aware comparison written by hand, since the compiler's type checker can't be used while supertypes are
   being decided.
 
-### Types nested in classes and interfaces
-
-During supertype resolution, types are resolved with file-level imports only, so a requirement like
-`val kind: Shape.Kind` written as `Kind` inside `Shape` doesn't resolve and the class doesn't match. Add the scopes of
-the containing classes.
-
-### Explaining ignored interfaces
-
-Report a warning on a `@Structural` interface that can never be used (type parameters, generic members, unresolved
-superinterfaces), saying why.
-
 ### Controlling accidental matches
 
 Every matching class in the module implements the interface. Consider:

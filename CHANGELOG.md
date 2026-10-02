@@ -6,6 +6,9 @@ Versions name the Kotlin line they work with, because the compiler plugin uses i
 
 ### Added
 
+- A requirement may name a type nested in the interface, or in a class around it: `val kind: Kind` inside `interface Shape` means `Shape.Kind`, which no import mentions and which previously matched nothing.
+- An interface the plugin can never use is warned about on its own declaration, saying why -- type parameters of its own, or a generic or extension member, inherited ones included.
+
 - A `@Structural` interface may extend a generic one: its arguments are substituted into the members inherited from it, so `Ranked : Comparable<String>` requires `compareTo(String)`, and `List<T>` becomes `List<String>`.
 
 ### Fixed

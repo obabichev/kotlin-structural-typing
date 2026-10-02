@@ -101,19 +101,48 @@ class TypeResolutionTest {
     }
 
     @Test
-    fun `types nested in the interface don't resolve yet, so nothing matches`() {
+    fun `a requirement can name a type nested in the interface`() {
         val compiled = compile(
             kotlin(
-                "Main.kt",
+                "Shape.kt",
                 """
                 package test
                 import com.obabichev.structural.Structural
-                @Structural interface Shape { enum class Kind { ROUND }; val kind: Kind }
-                class Ball(val kind: Shape.Kind)
-                fun run() = (Ball(Shape.Kind.ROUND) as Any is Shape).toString()
+                @Structural interface Shape {
+                    val kind: Kind
+                    enum class Kind { ROUND, FLAT }
+                }
+                fun kindOf(shape: Shape): Shape.Kind = shape.kind
                 """,
             ),
+            kotlin(
+                "Main.kt",
+                "package test\nclass Disc(val kind: Shape.Kind)\nfun run() = kindOf(Disc(Shape.Kind.ROUND)).toString()",
+            ),
         )
-        assertEquals("false", compiled.run(), "known limitation, see docs/known-issues.md")
+        assertEquals("ROUND", compiled.run())
+    }
+
+    @Test
+    fun `a requirement can name a type nested in a class around the interface`() {
+        val compiled = compile(
+            kotlin(
+                "Shapes.kt",
+                """
+                package test
+                import com.obabichev.structural.Structural
+                class Shapes {
+                    enum class Kind { ROUND, FLAT }
+                    @Structural interface Shape { val kind: Kind }
+                }
+                fun kindOf(shape: Shapes.Shape): Shapes.Kind = shape.kind
+                """,
+            ),
+            kotlin(
+                "Main.kt",
+                "package test\nclass Disc(val kind: Shapes.Kind)\nfun run() = kindOf(Disc(Shapes.Kind.FLAT)).toString()",
+            ),
+        )
+        assertEquals("FLAT", compiled.run())
     }
 }

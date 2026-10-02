@@ -109,6 +109,10 @@ Supertypes are decided in the compiler's supertype phase, so the plugin has to r
 
 After that phase (override marking, the warning), the compiler's resolved types and type checker are used.
 
+A requirement may also name a type nested in the interface, or in a class around it, which no import mentions: the
+classifiers nested in the declaring class and its containers are resolved first, innermost first, as the compiler does
+for the class itself.
+
 ### Near misses
 
 Matching is all-or-nothing, so a class that misses by one detail is simply not the interface, and the code that uses it

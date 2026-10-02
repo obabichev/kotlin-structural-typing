@@ -120,6 +120,19 @@ interface Named { val name: String }
 @Structural interface Texts : Holder<String>        // val items: List<T> asks for List<String>
 ```
 
+**A requirement may name a type nested in the interface**, which no import mentions:
+
+```kotlin
+@Structural
+interface Shape {
+    val kind: Kind
+
+    enum class Kind { ROUND, FLAT }
+}
+
+class Disc(val kind: Shape.Kind)     // matches
+```
+
 **Classes, objects, enum classes and nested classes** all qualify, as do members inherited from a superclass:
 
 ```kotlin
@@ -151,11 +164,18 @@ listOf<Sized>(Rectangular(1, 1), Paper.A4)     // a List<Sized> of unrelated cla
 Rectangular(1, 1) as Any is Sized              // true  — a real is-check, same object
 ```
 
-**And when a class nearly matches**, the compiler says why instead of failing somewhere else:
+**And nothing fails silently.** When a class nearly matches, the compiler says why, where the class is used:
 
 ```
 e: 'Panel' does not implement @Structural interface 'com.example.Sized':
        height: is internal, must be public
+```
+
+When an interface is one the plugin can't use at all, it says so on the interface, which is where you can fix it:
+
+```
+w: @Structural interface 'Box' is ignored, so no class will implement it: it has type parameters,
+   so a class can't be told which arguments it gets.
 ```
 
 What it won't do: a generic interface (`interface Box<T>`) is ignored, member types have to be written out rather than

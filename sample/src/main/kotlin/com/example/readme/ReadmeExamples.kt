@@ -28,6 +28,13 @@ interface Counter {
     var count: Int
 }
 
+@Structural
+interface Shape {
+    val kind: Kind
+
+    enum class Kind { ROUND, FLAT }
+}
+
 class Rectangular(val width: Int, val height: Int) {
     fun area(): Int = width * height
 }
@@ -57,6 +64,8 @@ class Word(private val word: String) {
 
 class Clicks(var count: Int)
 
+class Disc(val kind: Shape.Kind)
+
 /** `com.example.shapes.Sized` is declared in another module; this class never mentions it. */
 class Photo(val width: Int, val height: Int)
 
@@ -64,6 +73,7 @@ fun area(target: Sized): Int = target.area()
 fun describe(target: Labeled): String = "${target.name}=${target.label()}"
 fun rank(target: Ranked): Int = target.compareTo("m")
 fun bump(target: Counter) { target.count++ }
+fun kindOf(target: Shape): Shape.Kind = target.kind
 fun photoArea(): Int = libraryArea(Photo(2, 3))
 
 fun examples(): List<Any> = listOf(
@@ -77,4 +87,5 @@ fun examples(): List<Any> = listOf(
     listOf<Sized>(Rectangular(1, 1), Paper.A4).size,
     (Rectangular(1, 1) as Any) is Sized,
     (Score(1) as Any) is Counter,
+    kindOf(Disc(Shape.Kind.ROUND)),
 )

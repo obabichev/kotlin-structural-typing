@@ -52,6 +52,29 @@ class StructuralHighlightingTest : BasePlatformTestCase() {
             .filterNot { it.contains("MISSING_DEPENDENCY") }
     }
 
+    /** The editor should say why an interface is ignored, in the place the user can act on. */
+    fun testAnInterfaceThatCanNeverApplyIsReported() {
+        myFixture.addFileToProject("Structural.kt", annotation)
+        myFixture.configureByText(
+            "Box.kt",
+            """
+            import com.obabichev.structural.Structural
+
+            @Structural
+            interface Box<T> {
+                val value: T
+            }
+            """.trimIndent(),
+        )
+        val warnings = myFixture.doHighlighting()
+            .filter { it.severity == HighlightSeverity.WARNING }
+            .map { it.description }
+        assertTrue(
+            "expected the editor to explain the ignored interface, got $warnings",
+            warnings.any { it.contains("'Box' is ignored") && it.contains("type parameters") },
+        )
+    }
+
     fun testPlainKotlinFileHasNoErrors() {
         assertEmpty(errorsIn("Plain.kt", "class Rectangular(val width: Int, val height: Int)"))
     }

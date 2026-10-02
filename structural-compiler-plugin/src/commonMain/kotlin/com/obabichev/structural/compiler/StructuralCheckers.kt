@@ -11,10 +11,12 @@ import org.jetbrains.kotlin.fir.analysis.checkers.declaration.FirDeclarationChec
 import org.jetbrains.kotlin.fir.analysis.checkers.expression.ExpressionCheckers
 import org.jetbrains.kotlin.fir.analysis.checkers.expression.FirExpressionChecker
 import org.jetbrains.kotlin.fir.analysis.extensions.FirAdditionalCheckersExtension
+import org.jetbrains.kotlin.descriptors.ClassKind
 import org.jetbrains.kotlin.fir.declarations.FirRegularClass
 import org.jetbrains.kotlin.fir.diagnostics.FirDiagnosticHolder
 import org.jetbrains.kotlin.fir.expressions.FirFunctionCall
 import org.jetbrains.kotlin.fir.extensions.FirDeclarationPredicateRegistrar
+import org.jetbrains.kotlin.fir.extensions.predicateBasedProvider
 import org.jetbrains.kotlin.fir.resolve.calls.AbstractCallCandidate
 import org.jetbrains.kotlin.fir.resolve.calls.ArgumentTypeMismatch
 import org.jetbrains.kotlin.fir.resolve.diagnostics.ConeDiagnosticWithCandidates
@@ -36,7 +38,8 @@ class StructuralCheckers(
     }
 
     override val declarationCheckers: DeclarationCheckers = object : DeclarationCheckers() {
-        override val regularClassCheckers: Set<FirDeclarationChecker<FirRegularClass>> = setOf(NearMissChecker(index))
+        override val regularClassCheckers: Set<FirDeclarationChecker<FirRegularClass>> =
+            setOf(NearMissChecker(index), UnusableInterfaceChecker(index))
     }
 
     override val expressionCheckers: ExpressionCheckers = object : ExpressionCheckers() {
@@ -165,6 +168,29 @@ internal class NearMissChecker(private val index: StructuralIndex) :
             "'${declaration.name}' matches @Structural interface '${iface.classId.asFqNameString()}' but doesn't " +
                 "implement it, because these members have inferred types: ${inferred.joinToString()}. " +
                 "Declare their types explicitly.",
+        )
+    }
+}
+
+/**
+ * Warns on a @Structural interface that can never be added to any class. Such an interface is simply ignored, so
+ * without this the code using it fails somewhere else -- or compiles and silently never matches anything -- with
+ * nothing pointing at the interface as the cause.
+ */
+internal class UnusableInterfaceChecker(private val index: StructuralIndex) :
+    FirDeclarationChecker<FirRegularClass>(MppCheckerKind.Common) {
+
+    context(context: CheckerContext, reporter: DiagnosticReporter)
+    override fun check(declaration: FirRegularClass) {
+        if (declaration.classKind != ClassKind.INTERFACE) return
+        if (!index.session.predicateBasedProvider.matches(STRUCTURAL_PREDICATE, declaration)) return
+        val reason = (index.session.structuralInterface(declaration.symbol, index.types) as? InterfaceResult.Unusable)
+            ?.reason
+            ?: return
+        reporter.reportOn(
+            declaration.source,
+            StructuralDiagnostics.UNUSABLE_INTERFACE,
+            "@Structural interface '${declaration.name}' is ignored, so no class will implement it: $reason.",
         )
     }
 }
