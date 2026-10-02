@@ -1,32 +1,31 @@
 # Roadmap
 
 Planned work for the structural typing compiler plugin, roughly in priority order. Current behavior is described in
-[`proposal.md`](../proposal.md), current limitations in [`known-issues.md`](known-issues.md).
+[`design.md`](design.md), current limitations in [`known-issues.md`](known-issues.md).
 
 ## Language support
 
 ### Generic interfaces and members
 
-Not supported yet: a `@Structural` interface with type parameters, a generic superinterface, or a generic required
-member makes the plugin ignore the interface.
-
-Examples to support:
+A `@Structural` interface may **extend** a generic interface, which is implemented: the arguments it gives are
+substituted into the members inherited from it, including where a parameter sits inside another type.
 
 ```kotlin
-@Structural interface Box<T> { val value: T }            // class IntBox(val value: Int) : Box<Int>?
-@Structural interface Named : Comparable<Named> { … }    // generic superinterface
-@Structural interface Mapper { fun <T> map(value: T): T } // generic function
+@Structural interface Ranked : Comparable<String>        // works: asks for compareTo(String)
+@Structural interface Texts : Holder<String>             // works: val items: List<T> asks for List<String>
+@Structural interface Box<T> { val value: T }            // ignored: T would have to be guessed per class
+@Structural interface Mapper { fun <T> map(value: T): T } // ignored: generic member
 ```
 
-Open questions:
+What is left:
 
-- **Choosing type arguments:** `IntBox` could implement `Box<Int>`, `Box<Number>` or `Box<out Number>`. The most specific
-  choice (`Box<Int>`) looks natural but has to be decided per variance.
-- **Substitution:** members of generic superclasses and superinterfaces need their type parameters substituted before
-  matching, instead of being skipped as today.
-- **Generic functions:** matching needs type parameters with equivalent bounds, compared after renaming.
-- **Subtyping of types with arguments during supertype resolution:** it currently requires equal types, and would need
-  variance-aware comparison without the compiler's type checker.
+- **A generic interface itself.** `IntBox(val value: Int)` could be `Box<Int>`, `Box<Number>` or `Box<out Number>`.
+  Solving the arguments from the class's own members is the next step; the most specific choice (`Box<Int>`) is the only
+  one that is derivable rather than arbitrary. Parameters a class doesn't pin down should keep the interface out.
+- **Generic members:** matching needs type parameters with equivalent bounds, compared after renaming.
+- **Variance:** types with arguments must currently be equal, so `Box<Int>` does not satisfy `Box<Number>`. Relaxing it
+  needs variance-aware comparison written by hand, since the compiler's type checker can't be used while supertypes are
+  being decided.
 
 ### Types nested in classes and interfaces
 

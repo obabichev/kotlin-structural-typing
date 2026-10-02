@@ -2,6 +2,17 @@
 
 Versions name the Kotlin line they work with, because the compiler plugin uses internal compiler APIs.
 
+## Unreleased
+
+### Added
+
+- A `@Structural` interface may extend a generic one: its arguments are substituted into the members inherited from it, so `Ranked : Comparable<String>` requires `compareTo(String)`, and `List<T>` becomes `List<String>`.
+
+### Fixed
+
+- Matching no longer depends on the order files are compiled in: a type written with arguments is resolved argument by argument, rather than only when the compiler happened to resolve that file first.
+- An interface whose own supertypes were not yet resolved when first examined is examined again, instead of being refused for the rest of the compilation.
+
 ## 0.3.0-kotlin-2.4 — 2026-10-01
 
 ### Added

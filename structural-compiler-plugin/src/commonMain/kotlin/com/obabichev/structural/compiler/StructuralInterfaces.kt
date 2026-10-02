@@ -15,6 +15,8 @@ import org.jetbrains.kotlin.fir.declarations.FirProperty
 import org.jetbrains.kotlin.fir.extensions.predicate.LookupPredicate
 import org.jetbrains.kotlin.fir.extensions.predicateBasedProvider
 import org.jetbrains.kotlin.fir.resolve.ScopeSession
+import org.jetbrains.kotlin.fir.resolve.substitution.ConeSubstitutor
+import org.jetbrains.kotlin.fir.resolve.substitution.ConeSubstitutorByMap
 import org.jetbrains.kotlin.fir.resolve.providers.symbolProvider
 import org.jetbrains.kotlin.fir.scopes.processAllFunctions
 import org.jetbrains.kotlin.fir.scopes.processAllProperties
@@ -22,6 +24,7 @@ import org.jetbrains.kotlin.fir.scopes.unsubstitutedScope
 import org.jetbrains.kotlin.fir.symbols.SymbolInternals
 import org.jetbrains.kotlin.fir.symbols.impl.FirPropertySymbol
 import org.jetbrains.kotlin.fir.symbols.impl.FirRegularClassSymbol
+import org.jetbrains.kotlin.fir.types.ConeKotlinTypeProjection
 import org.jetbrains.kotlin.fir.types.ConeTypeParameterType
 import org.jetbrains.kotlin.fir.types.ConeKotlinType
 import org.jetbrains.kotlin.fir.types.classId
@@ -30,6 +33,7 @@ import org.jetbrains.kotlin.name.ClassId
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.name.StandardClassIds
+import org.jetbrains.kotlin.fir.types.ProjectionKind
 
 internal val STRUCTURAL_ANNOTATION = FqName("com.obabichev.structural.Structural")
 internal val STRUCTURAL_PREDICATE = LookupPredicate.create { annotated(STRUCTURAL_ANNOTATION) }
@@ -37,8 +41,18 @@ internal val STRUCTURAL_PREDICATE = LookupPredicate.create { annotated(STRUCTURA
 /** Kinds of classes that can gain a @Structural interface as a supertype. */
 internal val MATCHABLE_CLASS_KINDS = setOf(ClassKind.CLASS, ClassKind.OBJECT, ClassKind.ENUM_CLASS)
 
-/** A property or function together with the class or interface declaring it, whose file decides how its types resolve. */
-internal class Member(val declaration: FirCallableDeclaration, val owner: FirRegularClassSymbol) {
+/**
+ * A property or function together with the class or interface declaring it, whose file decides how its types resolve.
+ *
+ * [substitutor] maps the type parameters of a generic interface the member was inherited from to the arguments the
+ * @Structural interface gave them: a requirement of `Iterable<String>` is `iterator(): Iterator<String>`, not
+ * `Iterator<T>`. It is empty for everything declared without generics, which is every member of a class.
+ */
+internal class Member(
+    val declaration: FirCallableDeclaration,
+    val owner: FirRegularClassSymbol,
+    val substitutor: ConeSubstitutor = ConeSubstitutor.Empty,
+) {
     val name: Name? = when (declaration) {
         is FirProperty -> declaration.name
         is FirNamedFunction -> declaration.name
@@ -55,6 +69,38 @@ internal class StructuralInterface(val symbol: FirRegularClassSymbol, val requir
 }
 
 /**
+ * The usable @Structural interfaces, remembered across the classes of one compilation.
+ *
+ * An interface can be undecidable when first asked about: supertypes are resolved file by file, so an interface whose
+ * own supertypes this session hasn't reached yet looks like it requires nothing. Caching that answer would refuse it
+ * for the rest of the compilation and the classes that match it would silently miss out, so an interface that produced
+ * no requirements is asked about again for the next class, while the ones that did are kept.
+ */
+internal class StructuralInterfaceIndex(
+    private val session: FirSession,
+    private val types: TypeLookup,
+    private val imported: List<ClassId> = emptyList(),
+) {
+    private val usable = LinkedHashMap<ClassId, StructuralInterface>()
+
+    fun interfaces(): List<StructuralInterface> {
+        for (symbol in session.candidateInterfaces(imported)) {
+            if (symbol.classId in usable) continue
+            session.structuralInterface(symbol, types)?.let { usable[symbol.classId] = it }
+        }
+        return usable.values.toList()
+    }
+}
+
+/** Interfaces annotated @Structural in this module, plus the ones dependencies published. */
+private fun FirSession.candidateInterfaces(imported: List<ClassId>): List<FirRegularClassSymbol> {
+    val declared = predicateBasedProvider.getSymbolsByPredicate(STRUCTURAL_PREDICATE)
+        .filterIsInstance<FirRegularClassSymbol>()
+    val fromDependencies = imported.mapNotNull { symbolProvider.getClassLikeSymbolByClassId(it) as? FirRegularClassSymbol }
+    return (declared + fromDependencies).distinctBy { it.classId }.filter { it.classKind == ClassKind.INTERFACE }
+}
+
+/**
  * The usable @Structural interfaces: those declared in the module being compiled, and those [imported] from
  * dependencies that published an index (see [StructuralIndexFile]). A module declaring an interface itself wins over a
  * dependency publishing the same one.
@@ -62,32 +108,25 @@ internal class StructuralInterface(val symbol: FirRegularClassSymbol, val requir
 internal fun FirSession.structuralInterfaces(
     types: TypeLookup,
     imported: List<ClassId> = emptyList(),
-): List<StructuralInterface> {
-    val declared = predicateBasedProvider.getSymbolsByPredicate(STRUCTURAL_PREDICATE)
-        .filterIsInstance<FirRegularClassSymbol>()
-    val fromDependencies = imported.mapNotNull { symbolProvider.getClassLikeSymbolByClassId(it) as? FirRegularClassSymbol }
-    return (declared + fromDependencies)
-        .distinctBy { it.classId }
-        .filter { it.classKind == ClassKind.INTERFACE }
-        .mapNotNull { structuralInterface(it, types) }
-}
+): List<StructuralInterface> = candidateInterfaces(imported).mapNotNull { structuralInterface(it, types) }
 
 /**
  * Collects the abstract members of [iface] and all its superinterfaces. Returns null when a class can't safely implement
  * the interface by shape: type parameters anywhere in the hierarchy, generic or extension members, or superinterfaces
  * that don't resolve. Adding such an interface could leave a class with members it doesn't implement.
  */
-private fun FirSession.structuralInterface(iface: FirRegularClassSymbol, types: TypeLookup): StructuralInterface? {
+internal fun FirSession.structuralInterface(iface: FirRegularClassSymbol, types: TypeLookup): StructuralInterface? {
     val requirements = mutableListOf<Member>()
     // Members with an implementation in a more derived interface are not required from its superinterfaces.
     val implemented = mutableSetOf<String>()
     val visited = mutableSetOf<ClassId>()
 
-    fun collect(symbol: FirRegularClassSymbol): Boolean {
+    fun collect(symbol: FirRegularClassSymbol, substitutor: ConeSubstitutor): Boolean {
         if (!visited.add(symbol.classId)) return true
-        if (symbol.fir.typeParameters.isNotEmpty()) return false
+        // The @Structural interface itself may not be generic: its arguments would have to be guessed per class.
+        if (symbol.classId == iface.classId && symbol.fir.typeParameters.isNotEmpty()) return false
         for (declaration in declaredMembers(symbol)) {
-            val member = Member(declaration, symbol)
+            val member = Member(declaration, symbol, substitutor)
             val key = member.overrideKey()
             if (!isAbstract(declaration)) {
                 implemented += key
@@ -101,13 +140,39 @@ private fun FirSession.structuralInterface(iface: FirRegularClassSymbol, types: 
             val classId = superType.classId ?: return false
             if (classId == StandardClassIds.Any) continue
             val superSymbol = symbolProvider.getClassLikeSymbolByClassId(classId) as? FirRegularClassSymbol ?: return false
-            if (superSymbol.classKind != ClassKind.INTERFACE || !collect(superSymbol)) return false
+            if (superSymbol.classKind != ClassKind.INTERFACE) return false
+            val inherited = substitutorFor(superSymbol, superType, substitutor) ?: return false
+            if (!collect(superSymbol, inherited)) return false
         }
         return true
     }
 
-    if (!collect(iface) || requirements.isEmpty()) return null
+    if (!collect(iface, ConeSubstitutor.Empty) || requirements.isEmpty()) return null
     return StructuralInterface(iface, requirements)
+}
+
+/**
+ * The substitution for the members of [superSymbol], reached as [superType] from an interface already substituted by
+ * [outer]: each of its type parameters takes the argument written at that position, with the outer substitution applied
+ * first so a chain like `A : B<String>`, `B<T> : C<T>` ends up with `C<String>`.
+ *
+ * Null when the arguments can't be used: a count that doesn't match the parameters, a projection such as `out T`, or an
+ * argument still mentioning a type parameter, which a non-generic @Structural interface can't produce.
+ */
+private fun FirSession.substitutorFor(
+    superSymbol: FirRegularClassSymbol,
+    superType: ConeKotlinType,
+    outer: ConeSubstitutor,
+): ConeSubstitutor? {
+    val parameters = superSymbol.fir.typeParameters.map { it.symbol }
+    if (parameters.isEmpty()) return if (superType.typeArguments.isEmpty()) outer else null
+    if (superType.typeArguments.size != parameters.size) return null
+    val arguments = superType.typeArguments.map { argument ->
+        val type = (argument as? ConeKotlinTypeProjection)?.takeIf { it.kind == ProjectionKind.INVARIANT }?.type
+            ?: return null
+        outer.substituteOrSelf(type).takeUnless { it.contains { part -> part is ConeTypeParameterType } } ?: return null
+    }
+    return ConeSubstitutorByMap.create(parameters.zip(arguments).toMap(), this, false)
 }
 
 private fun Member.overrideKey(): String = when (val declaration = declaration) {
@@ -203,7 +268,7 @@ internal fun FirSession.mismatch(member: Member, requirement: Member, types: Typ
         return Mismatch.NotPublic(label, candidate.status.visibility)
     }
 
-    val expectedReturn = concrete(types.returnType(required, requirement.owner))
+    val expectedReturn = concrete(requirement.substituted(types.returnType(required, requirement.owner)))
         ?: return Mismatch.Unsupported(label, "its type in the interface can't be compared")
     val actualReturn = types.returnType(candidate, member.owner)?.let(::concrete)
         ?: return Mismatch.InferredType(label)
@@ -248,7 +313,7 @@ private fun functionMismatch(
         if (actual.name != expected.name) return Mismatch.ParameterName(label, at, expected.name, actual.name)
         if (actual.isVararg != expected.isVararg) return Mismatch.ParameterVararg(label, at, expected.isVararg)
         if (actual.defaultValue != null) return Mismatch.ParameterDefault(label, at)
-        val expectedType = concrete(types.parameterType(expected, requirement.owner))
+        val expectedType = concrete(requirement.substituted(types.parameterType(expected, requirement.owner)))
             ?: return Mismatch.Unsupported(label, "a parameter type in the interface can't be compared")
         val actualType = types.parameterType(actual, member.owner)?.let(::concrete)
             ?: return Mismatch.InferredType(label)
@@ -259,6 +324,9 @@ private fun functionMismatch(
     return if (types.isSubtype(actualReturn, expectedReturn)) null
     else Mismatch.ReturnType(label, expectedReturn, actualReturn)
 }
+
+/** The type as the @Structural interface sees it, with any inherited type parameters replaced by its arguments. */
+private fun Member.substituted(type: ConeKotlinType?): ConeKotlinType? = type?.let(substitutor::substituteOrSelf)
 
 /** Types involving type parameters (of a generic superclass) would need substitution: treat them as unknown. */
 private fun concrete(type: ConeKotlinType?): ConeKotlinType? =

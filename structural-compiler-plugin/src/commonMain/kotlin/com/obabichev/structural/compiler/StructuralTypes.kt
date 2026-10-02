@@ -23,13 +23,21 @@ import org.jetbrains.kotlin.fir.types.ConeClassLikeType
 import org.jetbrains.kotlin.fir.types.ConeErrorType
 import org.jetbrains.kotlin.fir.types.ConeKotlinType
 import org.jetbrains.kotlin.fir.types.ConeKotlinTypeProjection
+import org.jetbrains.kotlin.fir.types.impl.ConeTypeParameterTypeImpl
 import org.jetbrains.kotlin.fir.types.FirImplicitTypeRef
 import org.jetbrains.kotlin.fir.types.FirResolvedTypeRef
 import org.jetbrains.kotlin.fir.types.FirTypeRef
+import org.jetbrains.kotlin.fir.types.FirTypeProjectionWithVariance
 import org.jetbrains.kotlin.fir.types.FirUserTypeRef
+import org.jetbrains.kotlin.fir.types.builder.buildUserTypeRef
+import org.jetbrains.kotlin.fir.types.constructClassLikeType
+import org.jetbrains.kotlin.fir.types.impl.FirQualifierPartImpl
+import org.jetbrains.kotlin.fir.types.impl.FirTypeArgumentListImpl
+import org.jetbrains.kotlin.types.Variance
 import org.jetbrains.kotlin.fir.types.classId
 import org.jetbrains.kotlin.fir.types.coneType
 import org.jetbrains.kotlin.fir.types.isMarkedNullable
+import org.jetbrains.kotlin.fir.types.toLookupTag
 import org.jetbrains.kotlin.fir.types.lowerBoundIfFlexible
 import org.jetbrains.kotlin.fir.types.typeContext
 import org.jetbrains.kotlin.name.ClassId
@@ -124,11 +132,55 @@ internal class SupertypePhaseTypes(
         val type = when {
             typeRef is FirResolvedTypeRef -> typeRef.coneType
             typeRef is FirImplicitTypeRef -> null
-            typeRef is FirUserTypeRef && owner == currentClass && currentClassResolver != null ->
-                currentClassResolver.resolveUserType(typeRef).coneType
+            typeRef is FirUserTypeRef ->
+                typeRef.typeParameterOf(owner)
+                    ?: typeRef.withArgumentsResolved(owner)
+                    ?: resolveUserType(typeRef, owner)
             else -> fileScopes.resolve(typeRef, owner)
         }
         return type?.takeUnless { it is ConeErrorType }
+    }
+
+    private fun resolveUserType(typeRef: FirUserTypeRef, owner: FirRegularClassSymbol): ConeKotlinType? =
+        if (owner == currentClass && currentClassResolver != null) {
+            currentClassResolver.resolveUserType(typeRef).coneType
+        } else {
+            fileScopes.resolve(typeRef, owner)
+        }
+
+    /**
+     * A type written with arguments, such as `Comparable<String>` or `Iterator<T>`, resolved a piece at a time: the
+     * compiler's resolver expects the arguments to be resolved already and asserts when they are not, which is the
+     * normal state of a file it hasn't processed yet. Resolving them here instead makes the answer the same whatever
+     * order the files are in.
+     */
+    private fun FirUserTypeRef.withArgumentsResolved(owner: FirRegularClassSymbol): ConeKotlinType? {
+        val part = qualifier.lastOrNull() ?: return null
+        val argumentRefs = part.typeArgumentList.typeArguments
+        if (argumentRefs.isEmpty()) return null
+        val bare = buildUserTypeRef {
+            source = this@withArgumentsResolved.source
+            isMarkedNullable = this@withArgumentsResolved.isMarkedNullable
+            qualifier.addAll(this@withArgumentsResolved.qualifier.map { FirQualifierPartImpl(it.source, it.name, FirTypeArgumentListImpl(it.source)) })
+        }
+        // The qualifier alone names a generic class, which only resolves when bare types are allowed.
+        val classId = fileScopes.resolve(bare, owner, bareTypesAllowed = true)?.classId ?: return null
+        val arguments = argumentRefs.map { argument ->
+            val ref = (argument as? FirTypeProjectionWithVariance)?.takeIf { it.variance == Variance.INVARIANT }?.typeRef
+                ?: return null
+            resolve(ref, owner) ?: return null
+        }
+        return classId.constructClassLikeType(arguments.toTypedArray(), isMarkedNullable)
+    }
+
+    /**
+     * `T` in a member of a generic interface. Import scopes can't resolve a type parameter, so it is matched by name
+     * against the declaring class's own parameters; the substitution of the @Structural interface replaces it next.
+     */
+    private fun FirUserTypeRef.typeParameterOf(owner: FirRegularClassSymbol): ConeKotlinType? {
+        val name = qualifier.singleOrNull()?.name ?: return null
+        val parameter = owner.fir.typeParameters.firstOrNull { it.symbol.name == name } ?: return null
+        return ConeTypeParameterTypeImpl(parameter.symbol.toLookupTag(), isMarkedNullable = isMarkedNullable)
     }
 
     override fun isEqual(first: ConeKotlinType, second: ConeKotlinType): Boolean {
@@ -173,12 +225,27 @@ internal class FileScopes(private val session: FirSession) {
     private val scopeSession = ScopeSession()
     private val configurations = HashMap<ClassId, TypeResolutionConfiguration?>()
 
-    fun resolve(typeRef: FirTypeRef, owner: FirRegularClassSymbol): ConeKotlinType? {
+    /**
+     * Resolving can throw rather than fail: the compiler's resolver expects a type's arguments to be resolved already,
+     * and asks for them with an assertion. Reaching a reference before the file declaring it has been processed is
+     * normal here, so a failure means "not known yet", never a broken build.
+     */
+    fun resolve(
+        typeRef: FirTypeRef,
+        owner: FirRegularClassSymbol,
+        bareTypesAllowed: Boolean = false,
+    ): ConeKotlinType? = runCatching { resolveOrThrow(typeRef, owner, bareTypesAllowed) }.getOrNull()
+
+    private fun resolveOrThrow(
+        typeRef: FirTypeRef,
+        owner: FirRegularClassSymbol,
+        bareTypesAllowed: Boolean,
+    ): ConeKotlinType? {
         val configuration = configurations.getOrPut(owner.classId) { configurationFor(owner) } ?: return null
         return session.typeResolver.resolveType(
             typeRef,
             configuration,
-            /* areBareTypesAllowed = */ false,
+            bareTypesAllowed,
             /* isOperandOfIsOperator = */ false,
             /* resolveDeprecations = */ false,
             ResolvedSupertypesOnly,

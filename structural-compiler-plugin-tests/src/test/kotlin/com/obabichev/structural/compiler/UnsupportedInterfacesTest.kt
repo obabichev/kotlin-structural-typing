@@ -5,7 +5,8 @@ import kotlin.test.assertEquals
 
 /**
  * Interfaces the plugin doesn't support yet are never added to classes, so classes keep compiling exactly as without the
- * plugin: generic interfaces and members, generic superinterfaces, and interfaces from other modules. See docs/roadmap.md.
+ * plugin: generic interfaces and generic members. A generic *superinterface* is supported when it says what its
+ * arguments are; see GenericSuperinterfacesTest. See docs/roadmap.md.
  */
 class UnsupportedInterfacesTest {
     @Test
@@ -26,7 +27,7 @@ class UnsupportedInterfacesTest {
     }
 
     @Test
-    fun `interfaces with generic functions or generic superinterfaces are never added`() {
+    fun `interfaces with generic functions are never added`() {
         val compiled = compile(
             kotlin(
                 "Main.kt",
@@ -34,14 +35,11 @@ class UnsupportedInterfacesTest {
                 package test
                 import com.obabichev.structural.Structural
                 @Structural interface Converter { fun <T> convert(value: T): T }
-                interface Box<T> { val value: T }
-                @Structural interface IntBox : Box<Int>
                 class Identity { fun <T> convert(value: T): T = value }
-                class Holder(val value: Int)
-                fun run() = listOf(Identity() as Any is Converter, Holder(1) as Any is IntBox).toString()
+                fun run() = (Identity() as Any is Converter).toString()
                 """,
             ),
         )
-        assertEquals("[false, false]", compiled.run())
+        assertEquals("false", compiled.run())
     }
 }

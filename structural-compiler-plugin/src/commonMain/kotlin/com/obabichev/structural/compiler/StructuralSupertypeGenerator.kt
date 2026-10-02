@@ -20,10 +20,7 @@ class StructuralSupertypeGenerator(
     private val imported: List<ClassId> = emptyList(),
 ) : FirSupertypeGenerationExtension(session) {
     private val fileScopes = FileScopes(session)
-    private val structuralInterfaces by lazy {
-        session.structuralInterfaces(SupertypePhaseTypes(session, fileScopes), imported)
-
-    }
+    private val index = StructuralInterfaceIndex(session, SupertypePhaseTypes(session, fileScopes), imported)
 
     override fun FirDeclarationPredicateRegistrar.registerPredicates() {
         register(STRUCTURAL_PREDICATE)
@@ -41,6 +38,7 @@ class StructuralSupertypeGenerator(
         val types = SupertypePhaseTypes(session, fileScopes, klass.symbol, typeResolver)
         val existing = resolvedSupertypes.mapNotNull { it.coneType.classId }.toSet()
         val members = session.classMembers(klass.symbol, resolvedSupertypes.map { it.coneType }, types)
+        val structuralInterfaces = index.interfaces()
         val added = structuralInterfaces
             .filter { it.classId !in existing && session.implementsByShape(members, it, types) }
             .map { it.classId.constructClassLikeType(emptyArray(), isMarkedNullable = false) }

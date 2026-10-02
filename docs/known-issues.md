@@ -2,7 +2,7 @@
 
 Issues of the compiler plugin proof of concept. Items marked **verified** are covered by a test in
 `structural-compiler-plugin` or were reproduced during the spike (Kotlin 2.4.20, K2). Design details are in
-[`proposal.md`](../proposal.md).
+[`design.md`](design.md).
 
 ## Using the library
 
@@ -55,9 +55,11 @@ See the roadmap.
 
 ### 5. Some `@Structural` interfaces are ignored (verified)
 
-Interfaces with type parameters anywhere in their hierarchy, generic or extension members, or superinterfaces that
-don't resolve are never added to classes. Adding them could leave a class with unimplemented members and break its
-compilation. No diagnostic is reported for these yet. Generic interfaces are on the roadmap.
+An interface with type parameters of its own, with generic or extension members, or with a superinterface that doesn't
+resolve is never added to a class: adding it could leave the class with members it doesn't implement. A generic
+*superinterface* is supported, as long as the @Structural interface says what its arguments are -- `Ranked :
+Comparable<String>` then requires `compareTo(String)`. No diagnostic is reported for the cases that are refused;
+inferring a generic interface's own arguments is on the roadmap.
 
 ### 6. Matching changes existing code's behavior
 

@@ -61,6 +61,41 @@ class StructuralHighlightingTest : BasePlatformTestCase() {
         assertFalse(errorsIn("Broken.kt", "fun broken(): Int = \"not an int\"").isEmpty())
     }
 
+    /**
+     * A @Structural interface extending a generic one: the editor has to substitute the arguments as the build does,
+     * both where the parameter is the member's type and where it appears inside another type.
+     */
+    fun testClassMatchingAnInterfaceExtendingAGenericOneIsAccepted() {
+        myFixture.addFileToProject("Structural.kt", annotation)
+        val errors = errorsIn(
+            "Ranked.kt",
+            """
+            import com.obabichev.structural.Structural
+
+            interface Many<T>
+
+            object NoneAtAll : Many<String>
+
+            interface Source<T> {
+                fun load(): T
+                val items: Many<T>
+            }
+
+            @Structural
+            interface Texts : Source<String>
+
+            class Note(val items: Many<String>) {
+                fun load(): String = "hi"
+            }
+
+            fun read(texts: Texts): String = texts.load()
+
+            fun use() = read(Note(NoneAtAll))
+            """,
+        )
+        assertEmpty(errors)
+    }
+
     fun testMatchingClassIsAcceptedAsTheInterface() {
         myFixture.addFileToProject("Structural.kt", annotation)
         val errors = errorsIn(

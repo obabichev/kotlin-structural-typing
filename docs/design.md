@@ -1,28 +1,11 @@
-# Structural typing for Kotlin — compiler plugin proof of concept
+# How structural typing is implemented
 
-## Goal
+Kotlin only has nominal typing: a class satisfies an interface only if it declares it. This plugin lets any class whose
+shape fits a `@Structural` interface be used as that interface.
 
-Kotlin only has nominal typing: a class satisfies an interface only if it declares it. This library lets any class that
-has the right *shape* be used as an interface. The user writes only the interface and ordinary code:
-
-```kotlin
-@Structural
-interface Sized {
-    val width: Int
-    val height: Int
-}
-
-fun size(target: Sized) = target.width * target.height
-fun totalArea(items: List<Sized>) = items.sumOf { size(it) }
-
-class Rectangular(val width: Int, val height: Int, val color: String)
-
-size(Rectangular(1, 2, "red"))                          // 2
-totalArea(listOf(Rectangular(1, 2, "red")))             // collections, generics, varargs, nullable values all work
-Rectangular(1, 2, "red") is Sized                       // true
-```
-
-No generated code, no extra annotations on functions or classes, no wrappers.
+What that looks like for a user, and what is supported, is in the [README](../README.md); the limitations are in
+[`known-issues.md`](known-issues.md) and the planned work in [`roadmap.md`](roadmap.md). This
+document is the design: how the plugin does it, and why it does it that way.
 
 ## Approach
 
@@ -48,38 +31,7 @@ proxy classes. KSP can't see call sites and can't change existing classes, so it
 function × matching class and still couldn't support identity, `is` checks or collections. It was replaced by this
 plugin; see commits `44daaab` and `5eaaf04` in git history.
 
-## Usage
-
-```kotlin
-// build.gradle.kts of the module that declares the interfaces and classes
-dependencies {
-    implementation(project(":structural-annotations"))
-    kotlinCompilerPluginClasspath(project(":structural-compiler-plugin"))
-}
-```
-
-Requires Kotlin 2.4.x with the K2 compiler; one published artifact covers 2.4.0, 2.4.10 and 2.4.20. The published
-Gradle plugin applies both for a module and names the interfaces its dependencies publish.
-
-**IDE.** IntelliJ's K2 mode only runs compiler plugins bundled with the IDE, so without help the editor shows
-`Argument type mismatch` errors that the build doesn't have. The `Structural Typing` IntelliJ plugin
-(`structural-intellij-plugin`) fixes this without any IDE settings: it registers the Kotlin plugin's
-`org.jetbrains.kotlin.bundledFirCompilerPluginProvider` extension point, recognizes the structural compiler plugin in a
-project's build, and hands the IDE its own copy of it, compiled against the IDE's Kotlin compiler. The project declares
-the IDE plugin in `.idea/externalDependencies.xml`, so IntelliJ suggests installing it when the project is opened.
-
-## Modules
-
-| Module | Contents |
-|---|---|
-| `structural-annotations` | `@Structural` (`@Target(CLASS)`, `@Retention(BINARY)`) |
-| `structural-compiler-plugin` | The K2 compiler plugin, built against every supported Kotlin version (see [`docs/multiple-kotlin-versions.md`](docs/multiple-kotlin-versions.md)) |
-| `structural-compiler-plugin-tests` | Its tests, which need the plugin and one compiler on a classpath |
-| `structural-intellij-plugin` | IntelliJ plugin (ID `com.obabichev.structural.ide`, IntelliJ 2026.2) that makes the IDE run the compiler plugin |
-| `sample` | A Gradle module using the plugin; its tests are the end-to-end check |
-| `sample-library` | A module publishing a `@Structural` interface that `sample` matches from its own classes |
-
-Plugin files:
+## Plugin files
 
 1. **StructuralPluginRegistrar** / **StructuralCommandLineProcessor**: register the FIR extensions and diagnostics, and
    read the interfaces published by dependencies.
@@ -110,7 +62,7 @@ The interface is ignored, and never added to any class, if:
 - a superinterface can't be resolved
 
 Adding such an interface could leave a class with members it doesn't implement, which would break its compilation.
-Generic interfaces are planned; see [`docs/roadmap.md`](docs/roadmap.md).
+Generic interfaces are planned; see [`roadmap.md`](roadmap.md).
 
 ### Candidate classes
 
@@ -232,37 +184,18 @@ have to be compiled together with each other.
 
 ## Testing
 
-- **Plugin tests** (`structural-compiler-plugin-tests`) compile snippets with the plugin using kotlin-compile-testing
-  (`dev.zacsweers.kctfork:core`) and run the result. One file per feature, each starting with a short description:
-  - `BasicUsageTest`: what implementing by shape gives (identity, `is` checks, collections, any function shape)
-  - `PropertiesTest`: property requirements
-  - `FunctionsTest`: function requirements
-  - `SuperinterfacesTest`: members of Kotlin and Java superinterfaces
-  - `InheritanceTest`: superclasses, subclasses, classes declaring the interface themselves
-  - `EnumClassesTest`: enum classes
-  - `TypeResolutionTest`: types resolved in the right file, file order, compiler state, nested types
-  - `UnsupportedInterfacesTest`: interfaces that are never added
-  - `OtherModulesTest`: publishing the index, and what crosses a module boundary in each direction
-  - `InferredMemberTypesTest`: the inferred-types warning
-  - `NearMissTest`: what a class that nearly matches is told, at the call site and on the class
-- **`sample`**: a real Gradle build using the plugin through `kotlinCompilerPluginClasspath`, with one test file per
-  user-facing feature (`BasicUsageTest`, `CallSitesTest`, `PropertiesTest`, `InheritanceTest`, `EnumClassesTest`,
-  `FunctionsAndSuperinterfacesTest`, `OtherModulesTest` against `:sample-library`).
-- **`structural-intellij-plugin`**: unit tests for recognizing the compiler plugin jar, `verifyPluginStructure`, and
-  `StructuralHighlightingTest` / `StructuralCrossModuleHighlightingTest`, which analyze code through the Kotlin plugin
-  running in a test IDE and assert the errors the editor would show. The editor resolves declarations on demand rather
-  than phase by phase, and every bug this plugin had in the editor was invisible to the tests above. Whether a running
-  IDE loads the plugin at all is still checked by hand.
-- **`structural-gradle-plugin`**: reading the index a dependency publishes, and the coordinates it hands the compiler.
+Three levels, because each catches what the others can't:
 
-## Success criteria for the PoC
-
-1. The example from "Goal" compiles and runs with nothing but `@Structural` on the interface and the plugin applied.
-2. Matching classes can be used everywhere their interface is expected, including collections, generics and `is` checks.
-3. Classes that don't match, and unsupported interfaces, compile exactly as without the plugin.
-4. The `sample` module builds with Gradle and its tests pass without compiler warnings.
+- **`structural-compiler-plugin-tests`** compiles snippets with the plugin using kotlin-compile-testing and runs the
+  result, one file per feature. This is where the matching rules are pinned.
+- **`sample`** is a real Gradle build using the plugin, with `sample-library` next to it so an interface can come from
+  another module. It catches what only a real build shows: incremental compilation, the index in a jar, the Gradle side.
+- **`structural-intellij-plugin`** analyzes code through the Kotlin plugin running in a test IDE and asserts the errors
+  the editor would show. The editor resolves declarations on demand rather than phase by phase, and every bug this
+  plugin has had in the editor was invisible to the two levels above. Whether a running IDE loads the plugin at all is
+  still checked by hand.
 
 ## Future work
 
-Planned work is tracked in [`docs/roadmap.md`](docs/roadmap.md); current limitations are in
-[`docs/known-issues.md`](docs/known-issues.md).
+Planned work is tracked in [`roadmap.md`](roadmap.md); current limitations are in
+[`known-issues.md`](known-issues.md).

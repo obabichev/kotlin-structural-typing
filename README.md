@@ -80,6 +80,88 @@ doesn't have: download the zip from the
 other versions, turn off the registry key `kotlin.k2.only.bundled.compiler.plugins.enabled` instead
 (*Help → Find Action → Registry…*).
 
+## What you can do with it
+
+Each case is one interface and ordinary classes. They are compiled and run by
+`sample/src/main/kotlin/com/example/readme/`, so this list can't drift from what the plugin does.
+
+**Properties and functions.** A class needs a public member Kotlin would accept as an override of each:
+
+```kotlin
+@Structural
+interface Sized {
+    val width: Int
+    val height: Int
+    fun area(): Int
+}
+```
+
+**A `var` requires a `var`**, of exactly that type; a `val` may be a subtype of what the interface asks for:
+
+```kotlin
+@Structural interface Counter { var count: Int }
+
+class Clicks(var count: Int)        // matches
+class Score(val count: Int)         // doesn't: a val can't implement a var
+```
+
+**Superinterfaces come with their members**, Kotlin or Java, annotated or not:
+
+```kotlin
+interface Named { val name: String }
+
+@Structural interface Labeled : Named { fun label(): String }   // asks for name and label()
+```
+
+**A generic superinterface** is substituted with the arguments you give it:
+
+```kotlin
+@Structural interface Ranked : Comparable<String>   // asks for compareTo(other: String)
+@Structural interface Texts : Holder<String>        // val items: List<T> asks for List<String>
+```
+
+**Classes, objects, enum classes and nested classes** all qualify, as do members inherited from a superclass:
+
+```kotlin
+class Rectangular(val width: Int, val height: Int) { fun area(): Int = width * height }
+
+object Square { val width: Int = 1; val height: Int = 1; fun area(): Int = 1 }
+
+enum class Paper(val width: Int, val height: Int) { A4(210, 297); fun area(): Int = width * height }
+```
+
+Member types have to be written out: supertypes are decided before inferred types are known, so `fun area() = width *
+height` would not match. The plugin warns when that is the only thing in the way.
+
+**The interface may live in another module** built with the plugin — your classes don't have to be next to it:
+
+```kotlin
+// module :core
+@Structural interface Sized { val width: Int; val height: Int }
+
+// module :app, which depends on :core and mentions Sized nowhere
+class Photo(val width: Int, val height: Int)
+```
+
+**What that gives you**, because the class really implements the interface:
+
+```kotlin
+area(Paper.A4)                                 // 62370 — an enum entry where Sized is expected
+listOf<Sized>(Rectangular(1, 1), Paper.A4)     // a List<Sized> of unrelated classes
+Rectangular(1, 1) as Any is Sized              // true  — a real is-check, same object
+```
+
+**And when a class nearly matches**, the compiler says why instead of failing somewhere else:
+
+```
+e: 'Panel' does not implement @Structural interface 'com.example.Sized':
+       height: is internal, must be public
+```
+
+What it won't do: a generic interface (`interface Box<T>`) is ignored, member types have to be written out rather than
+inferred, and a class from a dependency can't gain an interface — its class file is fixed.
+[`docs/known-issues.md`](docs/known-issues.md) has the full list.
+
 ## How it works
 
 The plugin makes a matching class **really implement** the interface, as if you had written
@@ -99,7 +181,7 @@ implements the interface, identity is preserved (`===`), `is` checks work, and `
 
 A class matches when, for every abstract member of the interface and its superinterfaces, it has a public member that
 Kotlin would accept as an override: a `val` of a subtype, a `var` of exactly the same type, or a function with the same
-signature. [`proposal.md`](proposal.md) has the exact rules.
+signature. [`docs/design.md`](docs/design.md) has the exact rules.
 
 ## Repository layout
 
@@ -116,7 +198,7 @@ signature. [`proposal.md`](proposal.md) has the exact rules.
 | Document | Contents |
 |---|---|
 | [`CHANGELOG.md`](CHANGELOG.md) | What changed in each version |
-| [`proposal.md`](proposal.md) | Design, matching rules, testing, project history |
+| [`docs/design.md`](docs/design.md) | How it works: the matching rules, the compiler phases, and why |
 | [`docs/known-issues.md`](docs/known-issues.md) | Current limitations, with what has been verified |
 | [`docs/roadmap.md`](docs/roadmap.md) | Planned work, starting with generics |
 | [`docs/publishing.md`](docs/publishing.md) | How the artifacts are published |
@@ -164,7 +246,7 @@ Without `-Pstructural.ideaPath`, Gradle downloads IntelliJ IDEA 2026.2 to build 
 
 ## Status
 
-A proof of concept: 100 tests cover the supported cases, and the whole build passes without compiler warnings. It is
+A proof of concept: 109 tests cover the supported cases, and the whole build passes without compiler warnings. It is
 published for trying out, not for production use. The main limitations:
 
 - generic interfaces and generic members are ignored ([roadmap](docs/roadmap.md))
