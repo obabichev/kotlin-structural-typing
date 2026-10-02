@@ -32,18 +32,6 @@ class UnusableInterfacesTest {
     }
 
     @Test
-    fun `a generic member is named`() {
-        val warning = warningFor(
-            """
-            package test
-            import com.obabichev.structural.Structural
-            @Structural interface Mapper { fun <T> map(value: T): T }
-            """,
-        )
-        assertContains(warning, "'map()' is generic, and generic members are not matched")
-    }
-
-    @Test
     fun `an extension member is named`() {
         val warning = warningFor(
             """
@@ -61,12 +49,12 @@ class UnusableInterfacesTest {
             """
             package test
             import com.obabichev.structural.Structural
-            interface Mapper { fun <T> map(value: T): T }
-            @Structural interface Pipeline : Mapper { val name: String }
+            interface Formats { val Int.padded: String }
+            @Structural interface Pipeline : Formats { val name: String }
             """,
         )
         assertContains(warning, "@Structural interface 'Pipeline' is ignored")
-        assertContains(warning, "'map()' is generic")
+        assertContains(warning, "'padded' is an extension, which a class can't implement")
     }
 
     @Test
@@ -82,6 +70,24 @@ class UnusableInterfacesTest {
                     operator fun compareTo(other: String): Int = word.compareTo(other)
                 }
                 fun run() = (Word("a") as Any is Ranked).toString()
+                """,
+            ),
+        )
+        assertEquals(emptyList(), compiled.warnings, compiled.messages)
+        assertEquals("true", compiled.run())
+    }
+
+    @Test
+    fun `a generic member is not warned about`() {
+        val compiled = compile(
+            kotlin(
+                "Main.kt",
+                """
+                package test
+                import com.obabichev.structural.Structural
+                @Structural interface Mapper { fun <T> map(value: T): T }
+                class Identity { fun <R> map(value: R): R = value }
+                fun run() = (Identity() as Any is Mapper).toString()
                 """,
             ),
         )

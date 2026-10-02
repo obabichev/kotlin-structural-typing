@@ -11,6 +11,8 @@ import org.jetbrains.kotlin.fir.declarations.FirTypeAlias
 import org.jetbrains.kotlin.fir.declarations.FirValueParameter
 import org.jetbrains.kotlin.fir.extensions.FirSupertypeGenerationExtension
 import org.jetbrains.kotlin.fir.resolve.ScopeSession
+import org.jetbrains.kotlin.fir.resolve.substitution.ConeSubstitutor
+import org.jetbrains.kotlin.fir.resolve.substitution.ConeSubstitutorByMap
 import org.jetbrains.kotlin.fir.resolve.SupertypeSupplier
 import org.jetbrains.kotlin.fir.resolve.TypeResolutionConfiguration
 import org.jetbrains.kotlin.fir.resolve.providers.firProvider
@@ -24,10 +26,17 @@ import org.jetbrains.kotlin.fir.types.ConeClassLikeType
 import org.jetbrains.kotlin.fir.types.ConeErrorType
 import org.jetbrains.kotlin.fir.types.ConeKotlinType
 import org.jetbrains.kotlin.fir.types.ConeKotlinTypeProjection
+import org.jetbrains.kotlin.fir.types.ConeKotlinTypeProjectionIn
+import org.jetbrains.kotlin.fir.types.ConeKotlinTypeProjectionOut
+import org.jetbrains.kotlin.fir.types.ConeStarProjection
+import org.jetbrains.kotlin.fir.types.ConeTypeParameterType
+import org.jetbrains.kotlin.fir.types.ConeTypeProjection
+import org.jetbrains.kotlin.fir.types.ProjectionKind
 import org.jetbrains.kotlin.fir.types.impl.ConeTypeParameterTypeImpl
 import org.jetbrains.kotlin.fir.types.FirImplicitTypeRef
 import org.jetbrains.kotlin.fir.types.FirResolvedTypeRef
 import org.jetbrains.kotlin.fir.types.FirTypeRef
+import org.jetbrains.kotlin.fir.types.FirStarProjection
 import org.jetbrains.kotlin.fir.types.FirTypeProjectionWithVariance
 import org.jetbrains.kotlin.fir.types.FirUserTypeRef
 import org.jetbrains.kotlin.fir.types.builder.buildUserTypeRef
@@ -111,10 +120,18 @@ internal class SupertypePhaseTypes(
     private val currentClassResolver: FirSupertypeGenerationExtension.TypeResolveService? = null,
 ) : TypeLookup {
     override fun returnType(declaration: FirCallableDeclaration, owner: FirRegularClassSymbol): ConeKotlinType? =
-        resolve(declaration.returnTypeRef, owner) ?: declaration.symbol.typeFromAnotherModule(owner)
+        resolve(declaration.returnTypeRef, owner, declaration) ?: declaration.symbol.typeFromAnotherModule(owner)
 
     override fun parameterType(parameter: FirValueParameter, owner: FirRegularClassSymbol): ConeKotlinType? =
-        resolve(parameter.returnTypeRef, owner) ?: parameter.symbol.typeFromAnotherModule(owner)
+        resolve(parameter.returnTypeRef, owner, declaring = null) ?: parameter.symbol.typeFromAnotherModule(owner)
+
+    /** [parameterType] for a parameter of [declaring], whose own type parameters its types may mention. */
+    fun parameterType(
+        parameter: FirValueParameter,
+        owner: FirRegularClassSymbol,
+        declaring: FirCallableDeclaration,
+    ): ConeKotlinType? = resolve(parameter.returnTypeRef, owner, declaring)
+        ?: parameter.symbol.typeFromAnotherModule(owner)
 
     /**
      * The type of a member of a class this module only depends on. Asking a symbol resolves it if needed, which must
@@ -135,13 +152,17 @@ internal class SupertypePhaseTypes(
         if (symbol.origin == FirDeclarationOrigin.Source) symbol.fir.superTypeRefs.mapNotNull { resolve(it, symbol) }
         else runCatching { symbol.resolvedSuperTypes }.getOrDefault(emptyList())
 
-    private fun resolve(typeRef: FirTypeRef, owner: FirRegularClassSymbol): ConeKotlinType? {
+    private fun resolve(
+        typeRef: FirTypeRef,
+        owner: FirRegularClassSymbol,
+        declaring: FirCallableDeclaration? = null,
+    ): ConeKotlinType? {
         val type = when {
             typeRef is FirResolvedTypeRef -> typeRef.coneType
             typeRef is FirImplicitTypeRef -> null
             typeRef is FirUserTypeRef ->
-                typeRef.typeParameterOf(owner)
-                    ?: typeRef.withArgumentsResolved(owner)
+                typeRef.typeParameterOf(owner, declaring)
+                    ?: typeRef.withArgumentsResolved(owner, declaring)
                     ?: resolveUserType(typeRef, owner)
             else -> fileScopes.resolve(typeRef, owner)
         }
@@ -163,7 +184,10 @@ internal class SupertypePhaseTypes(
      * normal state of a file it hasn't processed yet. Resolving them here instead makes the answer the same whatever
      * order the files are in.
      */
-    private fun FirUserTypeRef.withArgumentsResolved(owner: FirRegularClassSymbol): ConeKotlinType? {
+    private fun FirUserTypeRef.withArgumentsResolved(
+        owner: FirRegularClassSymbol,
+        declaring: FirCallableDeclaration?,
+    ): ConeKotlinType? {
         val part = qualifier.lastOrNull() ?: return null
         val argumentRefs = part.typeArgumentList.typeArguments
         if (argumentRefs.isEmpty()) return null
@@ -175,9 +199,18 @@ internal class SupertypePhaseTypes(
         // The qualifier alone names a generic class, which only resolves when bare types are allowed.
         val classId = fileScopes.resolve(bare, owner, bareTypesAllowed = true)?.classId ?: return null
         val arguments = argumentRefs.map { argument ->
-            val ref = (argument as? FirTypeProjectionWithVariance)?.takeIf { it.variance == Variance.INVARIANT }?.typeRef
-                ?: return null
-            resolve(ref, owner) ?: return null
+            when {
+                argument is FirStarProjection -> ConeStarProjection
+                argument is FirTypeProjectionWithVariance -> {
+                    val type = resolve(argument.typeRef, owner, declaring) ?: return null
+                    when (argument.variance) {
+                        Variance.INVARIANT -> type
+                        Variance.OUT_VARIANCE -> ConeKotlinTypeProjectionOut(type)
+                        Variance.IN_VARIANCE -> ConeKotlinTypeProjectionIn(type)
+                    }
+                }
+                else -> return null
+            }
         }
         return classId.constructClassLikeType(arguments.toTypedArray(), isMarkedNullable)
     }
@@ -186,28 +219,106 @@ internal class SupertypePhaseTypes(
      * `T` in a member of a generic interface. Import scopes can't resolve a type parameter, so it is matched by name
      * against the declaring class's own parameters; the substitution of the @Structural interface replaces it next.
      */
-    private fun FirUserTypeRef.typeParameterOf(owner: FirRegularClassSymbol): ConeKotlinType? {
+    private fun FirUserTypeRef.typeParameterOf(
+        owner: FirRegularClassSymbol,
+        declaring: FirCallableDeclaration?,
+    ): ConeKotlinType? {
         val name = qualifier.singleOrNull()?.name ?: return null
-        val parameter = owner.fir.typeParameters.firstOrNull { it.symbol.name == name } ?: return null
-        return ConeTypeParameterTypeImpl(parameter.symbol.toLookupTag(), isMarkedNullable = isMarkedNullable)
+        // A generic member's own parameters come first: `fun <T> map(value: T)` means the member's T, not a class's.
+        val parameter = declaring?.typeParameters?.firstOrNull { it.symbol.name == name }?.symbol
+            ?: owner.fir.typeParameters.firstOrNull { it.symbol.name == name }?.symbol
+            ?: return null
+        return ConeTypeParameterTypeImpl(parameter.toLookupTag(), isMarkedNullable = isMarkedNullable)
     }
 
     override fun isEqual(first: ConeKotlinType, second: ConeKotlinType): Boolean {
-        val a = first.lowerBoundIfFlexible() as? ConeClassLikeType ?: return false
-        val b = second.lowerBoundIfFlexible() as? ConeClassLikeType ?: return false
+        val left = first.lowerBoundIfFlexible()
+        val right = second.lowerBoundIfFlexible()
+        if (left is ConeTypeParameterType || right is ConeTypeParameterType) {
+            // A generic member is matched against a generic member, so its own parameters stand for themselves.
+            return left is ConeTypeParameterType && right is ConeTypeParameterType &&
+                left.lookupTag.symbol == right.lookupTag.symbol &&
+                left.isMarkedNullable == right.isMarkedNullable
+        }
+        val a = left as? ConeClassLikeType ?: return false
+        val b = right as? ConeClassLikeType ?: return false
         return a.isMarkedNullable == b.isMarkedNullable && sameClassAndArguments(a, b)
     }
 
-    /** Plain class types by their declared supertypes; types with arguments only when their arguments are equal. */
+    /**
+     * Subtyping by walking declared supertypes, substituting arguments on the way, and comparing the arguments of the
+     * expected class by the variance it declared: `List<String>` satisfies `List<CharSequence>` because `List<out E>`
+     * is covariant, while `MutableList<String>` does not satisfy `MutableList<CharSequence>`.
+     *
+     * The compiler's own type checker would answer all of this, and must not be used here: it computes and caches
+     * supertypes of classes the compiler hasn't processed yet, which breaks later checks in unrelated code.
+     */
     override fun isSubtype(actual: ConeKotlinType, expected: ConeKotlinType): Boolean {
-        val a = actual.lowerBoundIfFlexible() as? ConeClassLikeType ?: return false
-        val e = expected.lowerBoundIfFlexible() as? ConeClassLikeType ?: return false
+        val a = actual.lowerBoundIfFlexible() as? ConeClassLikeType
+            ?: return isEqual(actual, expected)
+        val e = expected.lowerBoundIfFlexible() as? ConeClassLikeType
+            ?: return isEqual(actual, expected)
         if (a.isMarkedNullable && !e.isMarkedNullable) return false
-        if (a.typeArguments.isNotEmpty() || e.typeArguments.isNotEmpty()) return sameClassAndArguments(a, e)
-        val target = e.classId
-        if (target == StandardClassIds.Any) return true
-        return inheritsFrom(a.classId, target, mutableSetOf())
+        if (e.classId == StandardClassIds.Any) return true
+        // The expected class as the actual type sees it: Doc : Holder<String> seen as Holder<String>.
+        val seen = if (a.classId == e.classId) a else ancestor(a, e.classId, mutableSetOf())
+        if (seen == null || seen.typeArguments.size != e.typeArguments.size) return false
+        val variances = symbolFor(e.classId)?.fir?.typeParameters?.map { it.symbol.variance } ?: return false
+        if (variances.size != e.typeArguments.size) return false
+        return seen.typeArguments.indices.all { at ->
+            argumentFits(seen.typeArguments[at], e.typeArguments[at], variances[at])
+        }
     }
+
+    /**
+     * Whether the argument a type offers fits the one expected, under the declared [variance] of that position and any
+     * projection written at the use site: `out CharSequence` accepts a subtype, `in CharSequence` a supertype.
+     */
+    private fun argumentFits(offered: ConeTypeProjection, wanted: ConeTypeProjection, variance: Variance): Boolean {
+        if (wanted is ConeStarProjection) return true
+        val offeredType = (offered as? ConeKotlinTypeProjection)?.type ?: return false
+        val wantedType = (wanted as? ConeKotlinTypeProjection)?.type ?: return false
+        val effective = when {
+            wanted.kind == ProjectionKind.OUT || offered.kind == ProjectionKind.OUT -> Variance.OUT_VARIANCE
+            wanted.kind == ProjectionKind.IN || offered.kind == ProjectionKind.IN -> Variance.IN_VARIANCE
+            else -> variance
+        }
+        return when (effective) {
+            Variance.OUT_VARIANCE -> isSubtype(offeredType, wantedType)
+            Variance.IN_VARIANCE -> isSubtype(wantedType, offeredType)
+            Variance.INVARIANT -> isEqual(offeredType, wantedType)
+        }
+    }
+
+    /** [type]'s supertype named [target], with the arguments [type] gives it substituted in. */
+    private fun ancestor(
+        type: ConeClassLikeType,
+        target: ClassId,
+        visited: MutableSet<ClassId>,
+    ): ConeClassLikeType? {
+        val classId = type.classId
+        if (!visited.add(classId)) return null
+        val symbol = symbolFor(classId) ?: return null
+        val substitutor = argumentsOf(symbol, type) ?: return null
+        for (superType in superTypes(symbol)) {
+            val substituted = substitutor.substituteOrSelf(superType) as? ConeClassLikeType ?: continue
+            if (substituted.classId == target) return substituted
+            ancestor(substituted, target, visited)?.let { return it }
+        }
+        return null
+    }
+
+    /** Maps a class's own type parameters to the arguments [type] gives them. */
+    private fun argumentsOf(symbol: FirRegularClassSymbol, type: ConeClassLikeType): ConeSubstitutor? {
+        val parameters = symbol.fir.typeParameters.map { it.symbol }
+        if (parameters.isEmpty()) return ConeSubstitutor.Empty
+        if (type.typeArguments.size != parameters.size) return null
+        val arguments = type.typeArguments.map { (it as? ConeKotlinTypeProjection)?.type ?: return null }
+        return ConeSubstitutorByMap.create(parameters.zip(arguments).toMap(), session, false)
+    }
+
+    private fun symbolFor(classId: ClassId?): FirRegularClassSymbol? =
+        classId?.let { session.symbolProvider.getClassLikeSymbolByClassId(it) as? FirRegularClassSymbol }
 
     private fun sameClassAndArguments(a: ConeClassLikeType, b: ConeClassLikeType): Boolean =
         a.classId == b.classId &&

@@ -147,6 +147,23 @@ interface Report {
 class Page(val title: String)                 // matches
 ```
 
+**A requirement may be generic itself**, matched by a member of the same shape whatever its parameter is called:
+
+```kotlin
+@Structural interface Mapper { fun <T> map(value: T): T }
+
+class Identity { fun <R> map(value: R): R = value }     // matches
+```
+
+**Types with arguments follow the variance they declare**, as a hand-written override would:
+
+```kotlin
+@Structural interface Shelf { val items: List<CharSequence> }
+
+class Books(val items: List<String>)          // matches: List<out E> is covariant
+class Shopping(val items: MutableList<String>) // doesn't: MutableList<E> is invariant
+```
+
 **`suspend` and `vararg` are part of the shape**, and have to agree on both sides:
 
 ```kotlin

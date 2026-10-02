@@ -49,12 +49,13 @@ their class files (`OtherModulesTest`).
 
 ### 4. Some `@Structural` interfaces are ignored (verified)
 
-An interface with a generic or extension member, including one inherited from a superinterface, is never added to a
-class: adding it could leave the class with members it doesn't implement. Nor is one with a type parameter no member
-mentions, since a class could not say what that parameter is.
+An interface with an extension member, including one inherited from a superinterface, is never added to a class: no
+class can implement it. Nor is one with a type parameter no member mentions, since a class could not say what that
+parameter is.
 
-A generic interface whose parameters its members do mention is supported, and so is a generic superinterface: the
-arguments come from the class in front of it, or from what the @Structural interface wrote down.
+Generic interfaces, generic superinterfaces and generic members are all supported: the arguments come from the class in
+front of the interface, or from what the @Structural interface wrote down, and a generic member is matched by a member
+of the same shape whatever its parameters are called.
 
 The interface is warned about when it is refused, so the cause is visible where it can be fixed rather than only where
 a class fails to match:
@@ -132,8 +133,9 @@ While deciding supertypes the plugin can't use the compiler's type checker (doin
 `val b: Base = Derived()`; there is a regression test). Its own comparison:
 
 - handles plain class types by walking declared supertypes, independent of file order
-- requires types with arguments to be equal: `List<String>` doesn't satisfy `List<CharSequence>`, and a class is a
-  `Box<Int>` rather than a `Box<Number>`
+- compares types with arguments by the variance the class declared, walking supertypes and substituting: `List<String>`
+  satisfies `List<CharSequence>`, `MutableList<String>` does not, and a class is a `Box<Int>` rather than a `Box<Number>`
+  because the argument is read off the class
 - compares Java platform types by their non-null form
 - never matches members of generic superclasses whose types use type parameters
 

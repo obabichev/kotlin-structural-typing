@@ -5,8 +5,9 @@ import kotlin.test.assertEquals
 
 /**
  * Interfaces the plugin can't use are never added to classes, so classes keep compiling exactly as without the plugin:
- * generic members, and a type parameter no member mentions, which a class could not say anything about. Generic
- * interfaces and generic superinterfaces are supported; see GenericInterfacesTest and GenericSuperinterfacesTest.
+ * extension members, which no class can implement, and a type parameter no member mentions, which a class could not
+ * say anything about. Generic interfaces, generic superinterfaces and generic members are supported; see
+ * GenericInterfacesTest, GenericSuperinterfacesTest and GenericMembersTest.
  */
 class UnsupportedInterfacesTest {
     @Test
@@ -27,16 +28,16 @@ class UnsupportedInterfacesTest {
     }
 
     @Test
-    fun `interfaces with generic functions are never added`() {
+    fun `interfaces with extension members are never added`() {
         val compiled = compile(
             kotlin(
                 "Main.kt",
                 """
                 package test
                 import com.obabichev.structural.Structural
-                @Structural interface Converter { fun <T> convert(value: T): T }
-                class Identity { fun <T> convert(value: T): T = value }
-                fun run() = (Identity() as Any is Converter).toString()
+                @Structural interface Printer { val String.width: Int }
+                class Ruler { val width: Int = 1 }
+                fun run() = (Ruler() as Any is Printer).toString()
                 """,
             ),
         )

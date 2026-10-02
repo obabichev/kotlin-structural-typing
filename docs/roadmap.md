@@ -5,26 +5,29 @@ Planned work for the structural typing compiler plugin, roughly in priority orde
 
 ## Language support
 
-### Generic interfaces and members
+The generics work is done -- generic interfaces, generic superinterfaces, generic members and variance all match, see
+[`known-issues.md`](known-issues.md) for what each means. What is left in the language is narrower.
 
-A `@Structural` interface may be generic, or extend a generic interface. A generic interface takes the arguments the
-class in front of it gives its parameters; an extended one takes the arguments written down for it, substituted into the
-members inherited from it, including where a parameter sits inside another type.
+### Controlling accidental matches
 
-```kotlin
-@Structural interface Ranked : Comparable<String>         // works: asks for compareTo(String)
-@Structural interface Texts : Holder<String>              // works: val items: List<T> asks for List<String>
-@Structural interface Box<T> { val value: T }             // works: IntBox(val value: Int) is a Box<Int>
-@Structural interface Tagged<T> { val name: String }      // ignored: nothing says what T is
-@Structural interface Mapper { fun <T> map(value: T): T } // ignored: generic member
-```
+Every matching class in the module implements the interface. Consider:
 
-What is left:
+- a package scope option
+- an opt-out annotation
+- a warning when a class starts matching an interface
 
-- **Variance:** types with arguments must be equal, so a `Box<Int>` does not satisfy `Box<Number>` and a class gets the
-  most specific interface only. Relaxing it needs variance-aware comparison written by hand, since the compiler's type
-  checker can't be used while supertypes are being decided.
-- **Generic members:** `fun <T> map(value: T): T` is still refused; matching would need type parameters with equivalent
-  bounds, compared after renaming.
+## Tooling
 
-
+- **JetBrains Marketplace:** publish the IntelliJ plugin so the prompt from `.idea/externalDependencies.xml` installs it
+  directly.
+- **More IDE versions:** today the IDE plugin bundles a copy of the compiler plugin built for one IDE's compiler, which
+  is why it supports 2026.2 only. With the DevKit publishing a variant per compiler version, it could hand the IDE the
+  matching published variant instead, covering many IDE versions with one build. Check Android Studio too.
+- **Dropping the IDE plugin:** the Kotlin team is working on having the IDE load supported third-party compiler plugins
+  automatically. Once that ships, `structural-intellij-plugin` can go, and the registry key
+  `kotlin.k2.only.bundled.compiler.plugins.enabled` stops being the fallback.
+- **CI:** build against new Kotlin versions early; the plugin uses internal compiler APIs.
+- **A DevKit that knows released Kotlin versions:** the pinned EAP build predates Kotlin 2.4.20, which is why
+  `includeBetaAndRc=LATEST` is needed; see [`known-issues.md`](known-issues.md). Drop it when a newer DevKit ships.
+- **Testing that the IDE loads the plugin:** the editor's analysis is tested, but the substitution that gets our
+  compiler plugin in front of it is still checked by hand.

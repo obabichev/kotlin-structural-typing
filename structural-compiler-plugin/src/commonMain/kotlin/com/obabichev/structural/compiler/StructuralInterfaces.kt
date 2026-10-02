@@ -12,6 +12,7 @@ import org.jetbrains.kotlin.fir.declarations.FirCallableDeclaration
 import org.jetbrains.kotlin.fir.declarations.FirDeclarationOrigin
 import org.jetbrains.kotlin.fir.declarations.FirNamedFunction
 import org.jetbrains.kotlin.fir.declarations.FirProperty
+import org.jetbrains.kotlin.fir.declarations.FirValueParameter
 import org.jetbrains.kotlin.fir.extensions.predicate.LookupPredicate
 import org.jetbrains.kotlin.fir.extensions.predicateBasedProvider
 import org.jetbrains.kotlin.fir.resolve.ScopeSession
@@ -28,6 +29,8 @@ import org.jetbrains.kotlin.fir.symbols.impl.FirRegularClassSymbol
 import org.jetbrains.kotlin.fir.symbols.impl.FirTypeParameterSymbol
 import org.jetbrains.kotlin.fir.types.ConeKotlinTypeProjection
 import org.jetbrains.kotlin.fir.types.ConeTypeParameterType
+import org.jetbrains.kotlin.fir.types.impl.ConeTypeParameterTypeImpl
+import org.jetbrains.kotlin.fir.types.toLookupTag
 import org.jetbrains.kotlin.fir.types.ConeKotlinType
 import org.jetbrains.kotlin.fir.types.classId
 import org.jetbrains.kotlin.fir.types.contains
@@ -168,9 +171,6 @@ internal fun FirSession.structuralInterface(iface: FirRegularClassSymbol, types:
                 continue
             }
             if (key in implemented) continue
-            if (declaration.typeParameters.isNotEmpty()) {
-                return InterfaceResult.Unusable("'${member.label}' is generic, and generic members are not matched")
-            }
             if (declaration.receiverParameter != null) {
                 return InterfaceResult.Unusable("'${member.label}' is an extension, which a class can't implement")
             }
@@ -322,14 +322,18 @@ internal fun FirSession.mismatch(member: Member, requirement: Member, types: Typ
     val label = requirement.label
     if (member.name == null || member.name != requirement.name) return Mismatch.NoSuchMember(label)
     if (candidate.receiverParameter != null) return Mismatch.Unsupported(label, "is an extension")
-    if (candidate.typeParameters.isNotEmpty()) return Mismatch.Unsupported(label, "is generic")
     if (!candidate.status.visibility.isPublicOrDefault()) {
         return Mismatch.NotPublic(label, candidate.status.visibility)
     }
+    // A generic requirement is matched by a generic member of the same shape, its parameters read as the class's own.
+    val renaming = when (val lined = typeParameterRenaming(member, requirement, label, types)) {
+        is Renaming.Of -> lined.substitutor
+        is Renaming.No -> return lined.mismatch
+    }
 
-    val expectedReturn = concrete(requirement.substituted(types.returnType(required, requirement.owner)))
+    val expectedReturn = comparable(requirement.substituted(types.returnType(required, requirement.owner)), renaming)
         ?: return Mismatch.Unsupported(label, "its type in the interface can't be compared")
-    val actualReturn = types.returnType(candidate, member.owner)?.let(::concrete)
+    val actualReturn = comparable(types.returnType(candidate, member.owner), ConeSubstitutor.Empty, renaming)
         ?: return Mismatch.InferredType(label)
 
     return when {
@@ -344,7 +348,7 @@ internal fun FirSession.mismatch(member: Member, requirement: Member, types: Typ
             else -> null
         }
         required is FirNamedFunction && candidate is FirNamedFunction ->
-            functionMismatch(label, member, requirement, expectedReturn, actualReturn, types)
+            functionMismatch(label, member, requirement, expectedReturn, actualReturn, types, renaming)
         required is FirProperty -> Mismatch.Unsupported(label, "is a function, the interface declares a property")
         else -> Mismatch.Unsupported(label, "is a property, the interface declares a function")
     }
@@ -358,6 +362,7 @@ private fun functionMismatch(
     expectedReturn: ConeKotlinType,
     actualReturn: ConeKotlinType,
     types: TypeLookup,
+    renaming: ConeSubstitutor,
 ): Mismatch? {
     val candidate = member.declaration as FirNamedFunction
     val required = requirement.declaration as FirNamedFunction
@@ -372,9 +377,9 @@ private fun functionMismatch(
         if (actual.name != expected.name) return Mismatch.ParameterName(label, at, expected.name, actual.name)
         if (actual.isVararg != expected.isVararg) return Mismatch.ParameterVararg(label, at, expected.isVararg)
         if (actual.defaultValue != null) return Mismatch.ParameterDefault(label, at)
-        val expectedType = concrete(requirement.substituted(types.parameterType(expected, requirement.owner)))
+        val expectedType = comparable(requirement.substituted(types.parameterOf(expected, requirement)), renaming)
             ?: return Mismatch.Unsupported(label, "a parameter type in the interface can't be compared")
-        val actualType = types.parameterType(actual, member.owner)?.let(::concrete)
+        val actualType = comparable(types.parameterOf(actual, member), ConeSubstitutor.Empty, renaming)
             ?: return Mismatch.InferredType(label)
         if (!types.isEqual(actualType, expectedType)) {
             return Mismatch.ParameterType(label, at, expectedType, actualType)
@@ -393,6 +398,75 @@ private fun Member.mentions(parameter: FirTypeParameterSymbol, types: TypeLookup
 
 /** The type as the @Structural interface sees it, with any inherited type parameters replaced by its arguments. */
 internal fun Member.substituted(type: ConeKotlinType?): ConeKotlinType? = type?.let(substitutor::substituteOrSelf)
+
+/** How a generic requirement's type parameters line up with the candidate's, or why they don't. */
+private sealed interface Renaming {
+    data class Of(val substitutor: ConeSubstitutor) : Renaming
+    data class No(val mismatch: Mismatch) : Renaming
+}
+
+/**
+ * A requirement such as `fun <T> map(value: T): T` is matched by a member declaring as many type parameters, with the
+ * same bounds, and the rest of the signature equal once the requirement's parameters are read as the candidate's --
+ * which is what Kotlin asks of a hand-written override, where only the names may differ.
+ */
+private fun FirSession.typeParameterRenaming(
+    member: Member,
+    requirement: Member,
+    label: String,
+    types: TypeLookup,
+): Renaming {
+    val wanted = requirement.declaration.typeParameters
+    val given = member.declaration.typeParameters
+    if (wanted.isEmpty() && given.isEmpty()) return Renaming.Of(ConeSubstitutor.Empty)
+    if (wanted.isEmpty()) return Renaming.No(Mismatch.Unsupported(label, "is generic, the interface's member is not"))
+    if (given.isEmpty()) return Renaming.No(Mismatch.Unsupported(label, "is not generic, the interface's member is"))
+    if (wanted.size != given.size) {
+        return Renaming.No(
+            Mismatch.Unsupported(label, "declares ${given.size} type parameters, the interface's member ${wanted.size}"),
+        )
+    }
+    val substitutor = ConeSubstitutorByMap.create(
+        wanted.indices.associate { at ->
+            wanted[at].symbol to ConeTypeParameterTypeImpl(given[at].symbol.toLookupTag(), isMarkedNullable = false)
+        },
+        this,
+        false,
+    )
+    for (at in wanted.indices) {
+        val wantedBounds = wanted[at].symbol.fir.bounds.mapNotNull { types.type(it, requirement.owner) }
+        val givenBounds = given[at].symbol.fir.bounds.mapNotNull { types.type(it, member.owner) }
+        val sameBounds = wantedBounds.size == givenBounds.size &&
+            wantedBounds.zip(givenBounds).all { (want, give) ->
+                types.isEqual(give, substitutor.substituteOrSelf(want))
+            }
+        if (!sameBounds) {
+            return Renaming.No(
+                Mismatch.Unsupported(label, "its type parameter ${at + 1} has different bounds from the interface's"),
+            )
+        }
+    }
+    return Renaming.Of(substitutor)
+}
+
+/**
+ * A type ready to compare: the requirement's own parameters replaced by [substitutor], and parameters left over only
+ * tolerated when the member is itself generic, where they are the class's and stand for themselves. Everywhere else a
+ * leftover parameter means a member of a generic superclass, whose type this plugin can't decide.
+ */
+private fun comparable(
+    type: ConeKotlinType?,
+    substitutor: ConeSubstitutor,
+    renaming: ConeSubstitutor = substitutor,
+): ConeKotlinType? {
+    val substituted = type?.let(substitutor::substituteOrSelf) ?: return null
+    return if (renaming != ConeSubstitutor.Empty) substituted else concrete(substituted)
+}
+
+/** A value parameter's type, with the type parameters of the member declaring it in scope. */
+private fun TypeLookup.parameterOf(parameter: FirValueParameter, member: Member): ConeKotlinType? =
+    if (this is SupertypePhaseTypes) parameterType(parameter, member.owner, member.declaration)
+    else parameterType(parameter, member.owner)
 
 /** Types involving type parameters (of a generic superclass) would need substitution: treat them as unknown. */
 private fun concrete(type: ConeKotlinType?): ConeKotlinType? =

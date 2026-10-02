@@ -46,6 +46,16 @@ interface Box<T> {
 }
 
 @Structural
+interface Mapper {
+    fun <T> map(value: T): T
+}
+
+@Structural
+interface Shelf {
+    val items: List<CharSequence>
+}
+
+@Structural
 interface Shape {
     val kind: Kind
 
@@ -85,6 +95,13 @@ class Disc(val kind: Shape.Kind)
 
 class IntBox(val value: Int)
 
+class Identity {
+    fun <R> map(value: R): R = value
+}
+
+/** `List<out E>` is covariant, so a `List<String>` satisfies a `List<CharSequence>`. */
+class Books(val items: List<String>)
+
 class Page(val title: String) {
     suspend fun load(): String = title
     fun merge(vararg others: String): String = others.joinToString()
@@ -105,6 +122,8 @@ fun rank(target: Ranked): Int = target.compareTo("m")
 fun bump(target: Counter) { target.count++ }
 fun kindOf(target: Shape): Shape.Kind = target.kind
 fun openInt(box: Box<Int>): Int = box.value
+fun mapWith(mapper: Mapper): String = mapper.map("a")
+fun countOn(shelf: Shelf): Int = shelf.items.count()
 fun headlineOf(target: Report): String = target.headline()
 fun mergedBy(target: Report): String = target.merge("a", "b")
 suspend fun loadFrom(target: Report): String = target.load()
@@ -123,6 +142,8 @@ fun examples(): List<Any> = listOf(
     (Score(1) as Any) is Counter,
     kindOf(Disc(Shape.Kind.ROUND)),
     openInt(IntBox(7)),
+    mapWith(Identity()),
+    countOn(Books(listOf("a", "b"))),
     headlineOf(Page("p")),
     mergedBy(Page("p")),
     headlineOf(Summary("s")),

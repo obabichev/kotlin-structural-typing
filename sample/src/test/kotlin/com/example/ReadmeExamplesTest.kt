@@ -15,7 +15,7 @@ class ReadmeExamplesTest {
     @Test
     fun `every example in the README works`() {
         assertEquals(
-            listOf<Any>(6, 62370, 1, "pen=#pen", 13, 2, 6, 2, true, false, Shape.Kind.ROUND, 7, "== p ==", "a, b", "== s =="),
+            listOf<Any>(6, 62370, 1, "pen=#pen", 13, 2, 6, 2, true, false, Shape.Kind.ROUND, 7, "a", 2, "== p ==", "a, b", "== s =="),
             examples(),
         )
     }
