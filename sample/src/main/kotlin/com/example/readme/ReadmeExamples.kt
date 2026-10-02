@@ -29,6 +29,18 @@ interface Counter {
 }
 
 @Structural
+interface Report {
+    val title: String
+
+    /** A member with a body is not required of a class: only the abstract ones are. */
+    fun headline(): String = "== $title =="
+
+    suspend fun load(): String
+
+    fun merge(vararg others: String): String
+}
+
+@Structural
 interface Shape {
     val kind: Kind
 
@@ -66,6 +78,17 @@ class Clicks(var count: Int)
 
 class Disc(val kind: Shape.Kind)
 
+class Page(val title: String) {
+    suspend fun load(): String = title
+    fun merge(vararg others: String): String = others.joinToString()
+}
+
+/** A class may declare the interface itself; the plugin leaves it alone. */
+class Summary(override val title: String) : Report {
+    override suspend fun load(): String = title
+    override fun merge(vararg others: String): String = others.size.toString()
+}
+
 /** `com.example.shapes.Sized` is declared in another module; this class never mentions it. */
 class Photo(val width: Int, val height: Int)
 
@@ -74,6 +97,9 @@ fun describe(target: Labeled): String = "${target.name}=${target.label()}"
 fun rank(target: Ranked): Int = target.compareTo("m")
 fun bump(target: Counter) { target.count++ }
 fun kindOf(target: Shape): Shape.Kind = target.kind
+fun headlineOf(target: Report): String = target.headline()
+fun mergedBy(target: Report): String = target.merge("a", "b")
+suspend fun loadFrom(target: Report): String = target.load()
 fun photoArea(): Int = libraryArea(Photo(2, 3))
 
 fun examples(): List<Any> = listOf(
@@ -88,4 +114,7 @@ fun examples(): List<Any> = listOf(
     (Rectangular(1, 1) as Any) is Sized,
     (Score(1) as Any) is Counter,
     kindOf(Disc(Shape.Kind.ROUND)),
+    headlineOf(Page("p")),
+    mergedBy(Page("p")),
+    headlineOf(Summary("s")),
 )

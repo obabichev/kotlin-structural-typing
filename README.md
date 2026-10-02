@@ -120,6 +120,33 @@ interface Named { val name: String }
 @Structural interface Texts : Holder<String>        // val items: List<T> asks for List<String>
 ```
 
+**A member with a body is not required**, so an interface can carry defaults and a class need only provide the rest:
+
+```kotlin
+@Structural
+interface Report {
+    val title: String
+    fun headline(): String = "== $title =="   // a class doesn't have to provide this
+}
+
+class Page(val title: String)                 // matches
+```
+
+**`suspend` and `vararg` are part of the shape**, and have to agree on both sides:
+
+```kotlin
+@Structural
+interface Loader {
+    suspend fun load(): String
+    fun merge(vararg others: String): String
+}
+```
+
+**A class may declare the interface itself**; the plugin leaves it alone, and a missing `override` stays an ordinary
+compiler error.
+
+**Superinterfaces may be Java interfaces**, annotated or not — their members are required the same way.
+
 **A requirement may name a type nested in the interface**, which no import mentions:
 
 ```kotlin
@@ -163,6 +190,9 @@ area(Paper.A4)                                 // 62370 — an enum entry where 
 listOf<Sized>(Rectangular(1, 1), Paper.A4)     // a List<Sized> of unrelated classes
 Rectangular(1, 1) as Any is Sized              // true  — a real is-check, same object
 ```
+
+Call sites need nothing special either: `Sized?`, `List<Sized>`, `vararg Sized`, default arguments, generics and
+extensions on the interface all work, because the class implements it like any other.
 
 **And nothing fails silently.** When a class nearly matches, the compiler says why, where the class is used:
 
