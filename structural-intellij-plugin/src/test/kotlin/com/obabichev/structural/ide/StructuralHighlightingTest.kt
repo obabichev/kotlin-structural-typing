@@ -56,13 +56,13 @@ class StructuralHighlightingTest : BasePlatformTestCase() {
     fun testAnInterfaceThatCanNeverApplyIsReported() {
         myFixture.addFileToProject("Structural.kt", annotation)
         myFixture.configureByText(
-            "Box.kt",
+            "Tagged.kt",
             """
             import com.obabichev.structural.Structural
 
             @Structural
-            interface Box<T> {
-                val value: T
+            interface Tagged<T> {
+                val name: String
             }
             """.trimIndent(),
         )
@@ -71,8 +71,31 @@ class StructuralHighlightingTest : BasePlatformTestCase() {
             .map { it.description }
         assertTrue(
             "expected the editor to explain the ignored interface, got $warnings",
-            warnings.any { it.contains("'Box' is ignored") && it.contains("type parameters") },
+            warnings.any { it.contains("'Tagged' is ignored") && it.contains("no member mentions 'T'") },
         )
+    }
+
+    /** A generic interface matched with the argument the class gives it, in the editor as in the build. */
+    fun testGenericInterfaceIsMatchedWithTheClassesArgument() {
+        myFixture.addFileToProject("Structural.kt", annotation)
+        val errors = errorsIn(
+            "Box.kt",
+            """
+            import com.obabichev.structural.Structural
+
+            @Structural
+            interface Box<T> {
+                val value: T
+            }
+
+            class IntBox(val value: Int)
+
+            fun open(box: Box<Int>): Int = box.value
+
+            fun use() = open(IntBox(7))
+            """,
+        )
+        assertEmpty(errors)
     }
 
     fun testPlainKotlinFileHasNoErrors() {

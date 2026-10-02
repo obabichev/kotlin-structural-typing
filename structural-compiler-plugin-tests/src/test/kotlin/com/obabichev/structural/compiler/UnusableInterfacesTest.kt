@@ -18,17 +18,17 @@ class UnusableInterfacesTest {
     }
 
     @Test
-    fun `a generic interface says its arguments can't be decided`() {
+    fun `a parameter no member mentions is named`() {
         val warning = warningFor(
             """
             package test
             import com.obabichev.structural.Structural
-            @Structural interface Box<T> { val value: T }
-            class IntBox(val value: Int)
+            @Structural interface Tagged<T> { val name: String }
+            class Product(val name: String)
             """,
         )
-        assertContains(warning, "@Structural interface 'Box' is ignored, so no class will implement it")
-        assertContains(warning, "it has type parameters, so a class can't be told which arguments it gets")
+        assertContains(warning, "@Structural interface 'Tagged' is ignored, so no class will implement it")
+        assertContains(warning, "no member mentions 'T', so a class can't say what it is")
     }
 
     @Test
@@ -82,6 +82,24 @@ class UnusableInterfacesTest {
                     operator fun compareTo(other: String): Int = word.compareTo(other)
                 }
                 fun run() = (Word("a") as Any is Ranked).toString()
+                """,
+            ),
+        )
+        assertEquals(emptyList(), compiled.warnings, compiled.messages)
+        assertEquals("true", compiled.run())
+    }
+
+    @Test
+    fun `a generic interface a class can pin down is not warned about`() {
+        val compiled = compile(
+            kotlin(
+                "Main.kt",
+                """
+                package test
+                import com.obabichev.structural.Structural
+                @Structural interface Box<T> { val value: T }
+                class IntBox(val value: Int)
+                fun run() = (IntBox(1) as Any is Box<*>).toString()
                 """,
             ),
         )

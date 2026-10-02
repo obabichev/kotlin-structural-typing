@@ -16,6 +16,7 @@ import org.jetbrains.kotlin.fir.extensions.predicate.LookupPredicate
 import org.jetbrains.kotlin.fir.extensions.predicateBasedProvider
 import org.jetbrains.kotlin.fir.resolve.ScopeSession
 import org.jetbrains.kotlin.fir.resolve.substitution.ConeSubstitutor
+import org.jetbrains.kotlin.fir.resolve.substitution.ChainedSubstitutor
 import org.jetbrains.kotlin.fir.resolve.substitution.ConeSubstitutorByMap
 import org.jetbrains.kotlin.fir.resolve.providers.symbolProvider
 import org.jetbrains.kotlin.fir.scopes.processAllFunctions
@@ -24,6 +25,7 @@ import org.jetbrains.kotlin.fir.scopes.unsubstitutedScope
 import org.jetbrains.kotlin.fir.symbols.SymbolInternals
 import org.jetbrains.kotlin.fir.symbols.impl.FirPropertySymbol
 import org.jetbrains.kotlin.fir.symbols.impl.FirRegularClassSymbol
+import org.jetbrains.kotlin.fir.symbols.impl.FirTypeParameterSymbol
 import org.jetbrains.kotlin.fir.types.ConeKotlinTypeProjection
 import org.jetbrains.kotlin.fir.types.ConeTypeParameterType
 import org.jetbrains.kotlin.fir.types.ConeKotlinType
@@ -63,9 +65,29 @@ internal class Member(
     val label: String get() = if (declaration is FirNamedFunction) "$name()" else name?.asString().orEmpty()
 }
 
-/** A @Structural interface that classes can implement by shape, and the abstract members they must provide. */
-internal class StructuralInterface(val symbol: FirRegularClassSymbol, val requirements: List<Member>) {
+/**
+ * A @Structural interface that classes can implement by shape, and the abstract members they must provide.
+ *
+ * [typeParameters] is empty for an ordinary interface. A generic one is matched per class: its arguments are solved
+ * from the members of the class in front of it, so `IntBox(val value: Int)` implements `Box<Int>`.
+ */
+internal class StructuralInterface(
+    val symbol: FirRegularClassSymbol,
+    val requirements: List<Member>,
+    val typeParameters: List<FirTypeParameterSymbol> = emptyList(),
+) {
     val classId: ClassId get() = symbol.classId
+    val isGeneric: Boolean get() = typeParameters.isNotEmpty()
+
+    /** The same interface with [arguments] put in place of its parameters, so its requirements are concrete types. */
+    fun substituted(session: FirSession, arguments: List<ConeKotlinType>): StructuralInterface {
+        if (arguments.isEmpty()) return this
+        val substitutor = session.substitutorFor(this, arguments)
+        return StructuralInterface(
+            symbol,
+            requirements.map { Member(it.declaration, it.owner, ChainedSubstitutor(it.substitutor, substitutor)) },
+        )
+    }
 }
 
 /**
@@ -138,10 +160,6 @@ internal fun FirSession.structuralInterface(iface: FirRegularClassSymbol, types:
 
     fun collect(symbol: FirRegularClassSymbol, substitutor: ConeSubstitutor): InterfaceResult? {
         if (!visited.add(symbol.classId)) return null
-        // The @Structural interface itself may not be generic: its arguments would have to be guessed per class.
-        if (symbol.classId == iface.classId && symbol.fir.typeParameters.isNotEmpty()) {
-            return InterfaceResult.Unusable("it has type parameters, so a class can't be told which arguments it gets")
-        }
         for (declaration in declaredMembers(symbol)) {
             val member = Member(declaration, symbol, substitutor)
             val key = member.overrideKey()
@@ -179,7 +197,17 @@ internal fun FirSession.structuralInterface(iface: FirRegularClassSymbol, types:
     collect(iface, ConeSubstitutor.Empty)?.let { return it }
     // An interface that requires nothing may simply not be resolved yet, so this is not reported to the user.
     if (requirements.isEmpty()) return InterfaceResult.Undecided
-    return InterfaceResult.Usable(StructuralInterface(iface, requirements))
+
+    val parameters = iface.fir.typeParameters.map { it.symbol }
+    val unreachable = parameters.filterNot { parameter ->
+        requirements.any { requirement -> requirement.mentions(parameter, types) }
+    }
+    if (unreachable.isNotEmpty()) {
+        return InterfaceResult.Unusable(
+            "no member mentions ${unreachable.joinToString { "'${it.name}'" }}, so a class can't say what it is",
+        )
+    }
+    return InterfaceResult.Usable(StructuralInterface(iface, requirements, parameters))
 }
 
 /**
@@ -356,8 +384,15 @@ private fun functionMismatch(
     else Mismatch.ReturnType(label, expectedReturn, actualReturn)
 }
 
+/** Whether [parameter] appears in this requirement's own types, which is what lets a class decide what it is. */
+private fun Member.mentions(parameter: FirTypeParameterSymbol, types: TypeLookup): Boolean {
+    val own = listOfNotNull(types.returnType(declaration, owner)) +
+        (declaration as? FirNamedFunction)?.valueParameters?.mapNotNull { types.parameterType(it, owner) }.orEmpty()
+    return own.any { type -> type.contains { it is ConeTypeParameterType && it.lookupTag.symbol == parameter } }
+}
+
 /** The type as the @Structural interface sees it, with any inherited type parameters replaced by its arguments. */
-private fun Member.substituted(type: ConeKotlinType?): ConeKotlinType? = type?.let(substitutor::substituteOrSelf)
+internal fun Member.substituted(type: ConeKotlinType?): ConeKotlinType? = type?.let(substitutor::substituteOrSelf)
 
 /** Types involving type parameters (of a generic superclass) would need substitution: treat them as unknown. */
 private fun concrete(type: ConeKotlinType?): ConeKotlinType? =

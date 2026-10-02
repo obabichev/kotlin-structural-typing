@@ -120,6 +120,21 @@ interface Named { val name: String }
 @Structural interface Texts : Holder<String>        // val items: List<T> asks for List<String>
 ```
 
+**A generic interface** takes the argument the class gives it, read off the class rather than guessed:
+
+```kotlin
+@Structural
+interface Box<T> {
+    val value: T
+}
+
+class IntBox(val value: Int)         // a Box<Int>
+class TextBox(val value: String)     // a Box<String>
+```
+
+A class whose members disagree about the parameter, or that leaves it unsaid, or that breaks its bounds, doesn't get the
+interface at all — the alternative would be giving a class an interface its author never meant it to have.
+
 **A member with a body is not required**, so an interface can carry defaults and a class need only provide the rest:
 
 ```kotlin
@@ -208,7 +223,7 @@ w: @Structural interface 'Box' is ignored, so no class will implement it: it has
    so a class can't be told which arguments it gets.
 ```
 
-What it won't do: a generic interface (`interface Box<T>`) is ignored, member types have to be written out rather than
+What it won't do: member types have to be written out rather than
 inferred, and a class from a dependency can't gain an interface — its class file is fixed.
 [`docs/known-issues.md`](docs/known-issues.md) has the full list.
 

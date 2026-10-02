@@ -10,9 +10,9 @@ import kotlin.test.assertTrue
  * A @Structural interface may extend a generic one when it says what the arguments are: the members inherited from it
  * are required with those arguments substituted in, so `Ranked : Comparable<String>` asks for `compareTo(String)`.
  *
- * What is still refused is the @Structural interface being generic itself: its arguments would have to be guessed for
- * each class. Everything the arguments reach is substituted, including a parameter inside another type such as
- * `List<T>` or `Iterator<T>`.
+ * Everything the arguments reach is substituted, including a parameter inside another type such as `List<T>` or
+ * `Iterator<T>`. A generic @Structural interface is matched too, with the arguments the class gives it; that is
+ * GenericInterfacesTest.
  */
 class GenericSuperinterfacesTest {
     @Test
@@ -102,24 +102,6 @@ class GenericSuperinterfacesTest {
             kotlin("Main.kt", "package test\nclass Counter { fun load(): Int = 1 }\nfun run() = read(Counter())"),
         )
         assertFalse(compiled.succeeded, "load(): Int must not satisfy load(): String")
-        assertContains(compiled.errors.joinToString("\n"), "mismatch", ignoreCase = true)
-    }
-
-    @Test
-    fun `a generic interface is refused, because its arguments would have to be guessed`() {
-        val compiled = compile(
-            kotlin(
-                "Box.kt",
-                """
-                package test
-                import com.obabichev.structural.Structural
-                @Structural interface Box<T> { val value: T }
-                fun open(box: Box<Int>): Int = box.value
-                """,
-            ),
-            kotlin("Main.kt", "package test\nclass IntBox(val value: Int)\nfun run() = open(IntBox(1))"),
-        )
-        assertFalse(compiled.succeeded)
         assertContains(compiled.errors.joinToString("\n"), "mismatch", ignoreCase = true)
     }
 

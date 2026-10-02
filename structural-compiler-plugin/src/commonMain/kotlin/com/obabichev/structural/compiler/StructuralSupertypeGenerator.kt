@@ -38,10 +38,15 @@ class StructuralSupertypeGenerator(
         val types = SupertypePhaseTypes(session, fileScopes, klass.symbol, typeResolver)
         val existing = resolvedSupertypes.mapNotNull { it.coneType.classId }.toSet()
         val members = session.classMembers(klass.symbol, resolvedSupertypes.map { it.coneType }, types)
-        val structuralInterfaces = index.interfaces()
-        val added = structuralInterfaces
-            .filter { it.classId !in existing && session.implementsByShape(members, it, types) }
-            .map { it.classId.constructClassLikeType(emptyArray(), isMarkedNullable = false) }
+        val added = index.interfaces()
+            .filter { it.classId !in existing }
+            .mapNotNull { iface ->
+                // A generic interface is matched with the arguments this class gives its parameters, if it gives any.
+                val arguments = session.solveArguments(members, iface, types) ?: return@mapNotNull null
+                val substituted = iface.substituted(session, arguments)
+                if (!session.implementsByShape(members, substituted, types)) return@mapNotNull null
+                iface.classId.constructClassLikeType(arguments.toTypedArray(), isMarkedNullable = false)
+            }
 
 
 

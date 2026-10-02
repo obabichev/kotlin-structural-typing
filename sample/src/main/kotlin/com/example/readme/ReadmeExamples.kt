@@ -41,6 +41,11 @@ interface Report {
 }
 
 @Structural
+interface Box<T> {
+    val value: T
+}
+
+@Structural
 interface Shape {
     val kind: Kind
 
@@ -78,6 +83,8 @@ class Clicks(var count: Int)
 
 class Disc(val kind: Shape.Kind)
 
+class IntBox(val value: Int)
+
 class Page(val title: String) {
     suspend fun load(): String = title
     fun merge(vararg others: String): String = others.joinToString()
@@ -97,6 +104,7 @@ fun describe(target: Labeled): String = "${target.name}=${target.label()}"
 fun rank(target: Ranked): Int = target.compareTo("m")
 fun bump(target: Counter) { target.count++ }
 fun kindOf(target: Shape): Shape.Kind = target.kind
+fun openInt(box: Box<Int>): Int = box.value
 fun headlineOf(target: Report): String = target.headline()
 fun mergedBy(target: Report): String = target.merge("a", "b")
 suspend fun loadFrom(target: Report): String = target.load()
@@ -114,6 +122,7 @@ fun examples(): List<Any> = listOf(
     (Rectangular(1, 1) as Any) is Sized,
     (Score(1) as Any) is Counter,
     kindOf(Disc(Shape.Kind.ROUND)),
+    openInt(IntBox(7)),
     headlineOf(Page("p")),
     mergedBy(Page("p")),
     headlineOf(Summary("s")),

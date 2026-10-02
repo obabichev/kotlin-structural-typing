@@ -49,20 +49,20 @@ their class files (`OtherModulesTest`).
 
 ### 4. Some `@Structural` interfaces are ignored (verified)
 
-An interface with type parameters of its own, with generic or extension members, or with such a member inherited from a
-superinterface, is never added to a class: adding it could leave the class with members it doesn't implement. A generic
-*superinterface* is supported, as long as the @Structural interface says what its arguments are -- `Ranked :
-Comparable<String>` then requires `compareTo(String)`.
+An interface with a generic or extension member, including one inherited from a superinterface, is never added to a
+class: adding it could leave the class with members it doesn't implement. Nor is one with a type parameter no member
+mentions, since a class could not say what that parameter is.
 
-The interface itself is warned about, so the cause is visible where it can be fixed rather than only where a class
-fails to match:
+A generic interface whose parameters its members do mention is supported, and so is a generic superinterface: the
+arguments come from the class in front of it, or from what the @Structural interface wrote down.
+
+The interface is warned about when it is refused, so the cause is visible where it can be fixed rather than only where
+a class fails to match:
 
 ```
-w: @Structural interface 'Box' is ignored, so no class will implement it: it has type parameters, so a class can't be
-   told which arguments it gets.
+w: @Structural interface 'Tagged' is ignored, so no class will implement it: no member mentions 'T', so a class can't
+   say what it is.
 ```
-
-Inferring a generic interface's own arguments is on the roadmap.
 
 ### 5. Matching changes existing code's behavior
 
@@ -132,7 +132,8 @@ While deciding supertypes the plugin can't use the compiler's type checker (doin
 `val b: Base = Derived()`; there is a regression test). Its own comparison:
 
 - handles plain class types by walking declared supertypes, independent of file order
-- requires types with arguments to be equal: `List<String>` doesn't satisfy `List<CharSequence>`
+- requires types with arguments to be equal: `List<String>` doesn't satisfy `List<CharSequence>`, and a class is a
+  `Box<Int>` rather than a `Box<Number>`
 - compares Java platform types by their non-null form
 - never matches members of generic superclasses whose types use type parameters
 

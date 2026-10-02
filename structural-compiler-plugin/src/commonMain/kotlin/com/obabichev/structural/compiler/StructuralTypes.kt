@@ -56,6 +56,9 @@ internal interface TypeLookup {
 
     fun superTypes(symbol: FirRegularClassSymbol): List<ConeKotlinType>
 
+    /** A type written somewhere other than a member's signature, such as a type parameter's bound. */
+    fun type(typeRef: FirTypeRef, owner: FirRegularClassSymbol): ConeKotlinType?
+
     fun isSubtype(actual: ConeKotlinType, expected: ConeKotlinType): Boolean
 
     fun isEqual(first: ConeKotlinType, second: ConeKotlinType): Boolean
@@ -77,6 +80,9 @@ internal class ResolvedTypes(private val session: FirSession) : TypeLookup {
 
     override fun superTypes(symbol: FirRegularClassSymbol): List<ConeKotlinType> =
         runCatching { symbol.resolvedSuperTypes }.getOrDefault(emptyList())
+
+    override fun type(typeRef: FirTypeRef, owner: FirRegularClassSymbol): ConeKotlinType? =
+        (typeRef as? FirResolvedTypeRef)?.coneType?.takeUnless { it is ConeErrorType }
 
     override fun isSubtype(actual: ConeKotlinType, expected: ConeKotlinType): Boolean =
         AbstractTypeChecker.isSubtypeOf(session.typeContext, actual, expected)
@@ -141,6 +147,8 @@ internal class SupertypePhaseTypes(
         }
         return type?.takeUnless { it is ConeErrorType }
     }
+
+    override fun type(typeRef: FirTypeRef, owner: FirRegularClassSymbol): ConeKotlinType? = resolve(typeRef, owner)
 
     private fun resolveUserType(typeRef: FirUserTypeRef, owner: FirRegularClassSymbol): ConeKotlinType? =
         if (owner == currentClass && currentClassResolver != null) {

@@ -15,6 +15,7 @@ import org.jetbrains.kotlin.fir.extensions.transform
 import org.jetbrains.kotlin.fir.symbols.SymbolInternals
 import org.jetbrains.kotlin.fir.symbols.impl.FirClassLikeSymbol
 import org.jetbrains.kotlin.fir.symbols.impl.FirRegularClassSymbol
+import org.jetbrains.kotlin.fir.types.ConeKotlinTypeProjection
 import org.jetbrains.kotlin.fir.types.FirResolvedTypeRef
 import org.jetbrains.kotlin.fir.types.classId
 import org.jetbrains.kotlin.fir.types.coneType
@@ -64,9 +65,18 @@ class StructuralOverrideMarker(
         val member = Member(declaration, klass)
         val implements = klass.fir.superTypeRefs
             .filter { it.source?.kind !is KtRealSourceElementKind }
-            .mapNotNull { (it as? FirResolvedTypeRef)?.coneType?.classId }
-            .mapNotNull { structuralInterfaces[it] }
-            .any { iface -> iface.requirements.any { session.satisfies(member, it, types) } }
+            .mapNotNull { (it as? FirResolvedTypeRef)?.coneType }
+            .any { added ->
+                val iface = added.classId?.let { structuralInterfaces[it] } ?: return@any false
+                // A generic interface was added with the arguments this class gave it; match against those.
+                val arguments = added.typeArguments.mapNotNull { (it as? ConeKotlinTypeProjection)?.type }
+                val substituted = if (arguments.size == iface.typeParameters.size) {
+                    iface.substituted(session, arguments)
+                } else {
+                    iface
+                }
+                substituted.requirements.any { session.satisfies(member, it, types) }
+            }
         return if (implements) status.transform { isOverride = true } else status
     }
 }

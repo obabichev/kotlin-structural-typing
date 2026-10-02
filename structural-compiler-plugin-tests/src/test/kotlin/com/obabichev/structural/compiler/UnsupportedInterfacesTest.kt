@@ -4,22 +4,22 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 
 /**
- * Interfaces the plugin doesn't support yet are never added to classes, so classes keep compiling exactly as without the
- * plugin: generic interfaces and generic members. A generic *superinterface* is supported when it says what its
- * arguments are; see GenericSuperinterfacesTest. See docs/roadmap.md.
+ * Interfaces the plugin can't use are never added to classes, so classes keep compiling exactly as without the plugin:
+ * generic members, and a type parameter no member mentions, which a class could not say anything about. Generic
+ * interfaces and generic superinterfaces are supported; see GenericInterfacesTest and GenericSuperinterfacesTest.
  */
 class UnsupportedInterfacesTest {
     @Test
-    fun `generic interfaces are never added`() {
+    fun `an interface whose parameter no member mentions is never added`() {
         val compiled = compile(
             kotlin(
                 "Main.kt",
                 """
                 package test
                 import com.obabichev.structural.Structural
-                @Structural interface Boxed<T> { val value: T }
-                class IntBox(val value: Int)
-                fun run() = (IntBox(1) as Any is Boxed<*>).toString()
+                @Structural interface Tagged<T> { val name: String }
+                class Product(val name: String)
+                fun run() = (Product("p") as Any is Tagged<*>).toString()
                 """,
             ),
         )
