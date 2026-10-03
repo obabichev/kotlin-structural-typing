@@ -15,3 +15,13 @@ interface Sized {
 fun area(target: Sized): Int = target.width * target.height
 
 fun total(targets: List<Sized>): Int = targets.sumOf { area(it) }
+
+/** For the sample's third-party example: kotlinx.datetime.LocalDate has exactly these, and never heard of us. */
+@Structural
+interface Dated {
+    val year: Int
+    val monthNumber: Int
+    val dayOfMonth: Int
+}
+
+fun iso(date: Dated): String = "%04d-%02d-%02d".format(date.year, date.monthNumber, date.dayOfMonth)

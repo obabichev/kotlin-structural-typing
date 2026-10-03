@@ -26,6 +26,8 @@ include(
     ":structural-compiler-plugin-tests",
     ":structural-gradle-plugin",
     ":structural-intellij-plugin",
+    ":structural-runtime",
     ":sample",
     ":sample-library",
+    ":sample-dependency",
 )

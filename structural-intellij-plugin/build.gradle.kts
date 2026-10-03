@@ -59,12 +59,19 @@ tasks.named<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>("compileIdeCompiler
 // The highlighting test registers the compiler plugin's own extensions with the IDE's analysis.
 dependencies {
     testImplementation(ideCompilerPlugin.output)
+    // The plugin decides whether a dependency class matches from its bytes, so the copy needs that code and ASM.
+    "ideCompilerPluginImplementation"(project(":structural-runtime"))
 }
 
 val ideCompilerPluginJar = tasks.register<Jar>("ideCompilerPluginJar") {
     archiveFileName = "structural-compiler-plugin.jar"
     destinationDirectory = layout.buildDirectory.dir("ide-compiler-plugin")
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
     from(ideCompilerPlugin.output)
+    // The IDE loads this jar on its own, so the bytecode reader and ASM have to travel inside it.
+    from(configurations[ideCompilerPlugin.runtimeClasspathConfigurationName].filter { it.name.endsWith(".jar") }.map { zipTree(it) }) {
+        exclude("META-INF/*.SF", "META-INF/*.DSA", "META-INF/*.RSA", "META-INF/MANIFEST.MF", "module-info.class")
+    }
     // The IntelliJ Platform Gradle plugin adds the patched plugin.xml to every source set's resources.
     exclude("META-INF/plugin.xml")
 }
@@ -93,6 +100,8 @@ val fixtureLibrary: Configuration by configurations.creating
 
 dependencies {
     fixtureLibrary(project(":sample-library"))
+    // A module compiled without the plugin, standing in for a library whose class files nobody can change.
+    fixtureLibrary(project(":sample-dependency"))
 }
 
 tasks.test {

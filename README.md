@@ -265,6 +265,25 @@ A class matches when, for every abstract member of the interface and its superin
 Kotlin would accept as an override: a `val` of a subtype, a `var` of exactly the same type, or a function with the same
 signature. [`docs/design.md`](docs/design.md) has the exact rules.
 
+## Classes from libraries (unreleased)
+
+A class in a dependency can match too, including one from a library that has never heard of this plugin. The compiler is
+given the match as it reads the class file, and `structural-runtime` puts the interface on the class as it loads:
+
+```kotlin
+import com.example.shapes.Dated      // @Structural, declared in another module of this build
+import kotlinx.datetime.LocalDate    // an ordinary library: year, monthNumber, dayOfMonth
+
+fun releaseIso(): String = iso(LocalDate(2026, 10, 2))   // compiles: LocalDate matches Dated
+```
+
+Both halves are needed: the call compiles to a cast, and the cast holds only when the class was loaded through
+`StructuralClassLoader`. `sample/src/test/kotlin/com/example/ExternalLibraryTest.kt` shows both, including the
+`ClassCastException` on an ordinary classloader.
+
+Limits today: the interface has to come from a dependency as well, the dependency class must be written in Kotlin (a
+Java class carries no Kotlin metadata for the matcher to read), and the editor does not know about any of it yet.
+
 ## Repository layout
 
 | Module | Contents |
@@ -275,7 +294,9 @@ signature. [`docs/design.md`](docs/design.md) has the exact rules.
 | `structural-gradle-plugin` | Gradle plugin that applies both to a module |
 | `structural-intellij-plugin` | IntelliJ plugin so the IDE analyzes code the same way as the build, and the tests that check it does |
 | `sample` | A Gradle module using the plugin; its tests show every supported case |
-| `sample-library` | A module publishing a `@Structural` interface that `sample` matches from its own classes |
+| `sample-library` | A module publishing `@Structural` interfaces that `sample` matches from its own classes and from a library |
+| `sample-dependency` | A module built without the plugin, standing in for a library whose class files can't be changed |
+| `structural-runtime` | Adds interfaces to classes from dependencies as they load, by rewriting them |
 
 | Document | Contents |
 |---|---|

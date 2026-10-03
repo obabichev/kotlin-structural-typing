@@ -28,6 +28,8 @@ tasks.named<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>("compileTestKotlin"
 
 dependencies {
     testImplementation(project(":structural-annotations"))
+    // Matching a dependency class is decided from its bytes, which is the runtime module's job.
+    testImplementation(project(":structural-runtime"))
     testImplementation(libs.kotlin.compiler.embeddable)
     testImplementation(libs.kctfork.core)
     testImplementation(kotlin("test"))
