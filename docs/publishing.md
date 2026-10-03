@@ -9,7 +9,7 @@ Three artifacts are published to Maven Central under `com.obabichev.structural`,
 | `structural-compiler-plugin` | The K2 compiler plugin |
 | `structural-gradle-plugin` | The Gradle plugin, applied as `com.obabichev.structural` |
 
-The version names the Kotlin line it works with, e.g. `0.3.0-kotlin-2.4`, because the compiler plugin uses internal
+The version names the Kotlin line it works with, e.g. `0.4.0-kotlin-2.4`, because the compiler plugin uses internal
 compiler APIs. Bump the Kotlin part when moving to a new Kotlin release; see `build.gradle.kts`.
 
 `structural-compiler-plugin` publishes an umbrella artifact carrying a copy of the plugin per Kotlin version, plus a
@@ -33,7 +33,7 @@ repositories:
 ```kotlin
 plugins {
     kotlin("jvm") version "2.4.20"
-    id("com.obabichev.structural") version "0.3.0-kotlin-2.4"
+    id("com.obabichev.structural") version "0.4.0-kotlin-2.4"
 }
 ```
 

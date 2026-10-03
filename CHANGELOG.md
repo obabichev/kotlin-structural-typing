@@ -2,7 +2,7 @@
 
 Versions name the Kotlin line they work with, because the compiler plugin uses internal compiler APIs.
 
-## Unreleased
+## 0.4.0-kotlin-2.4 — 2026-10-03
 
 ### Added
 
